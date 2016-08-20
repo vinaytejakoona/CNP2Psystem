@@ -86,11 +86,11 @@ int main(int argc, char *argv[]) {
     printf("received: %s \n", buf);
     
     
-    //send join command
+    //join - send option 1
     char command[MAXDATASIZE];
     memset(command, '\0', MAXDATASIZE);
     strcat(command, "1 ");
-    strcat(command, argv[1]);
+    strcat(command, argv[1]); //append username
     if (send(sockfd, command, MAXDATASIZE-1, 0) == -1) {
         perror("send");
         close(sockfd);
@@ -114,11 +114,24 @@ int main(int argc, char *argv[]) {
             scanf("%d", &option);
             continue;
         }
+        
+        //Publish
+        if(option == 1) {
+            //send option 2 
+        }
+        
+        //Search & Fetch
+        if(option==2){
+            //send option 3
+            
+        }
+        
+        //quit
         if (option == 3) {
 
-            //send disconnect option   
+            //send option 4   
             memset(command, '\0', MAXDATASIZE);
-            strcat(command, "3 ");
+            strcat(command, "4 ");
             strcat(command, argv[1]);
             if (send(sockfd, command, MAXDATASIZE-1, 0) == -1) {
                 perror("send");
