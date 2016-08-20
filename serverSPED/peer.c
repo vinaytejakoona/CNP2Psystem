@@ -11,7 +11,9 @@
 #include <netinet/in.h>
 #include <sys/socket.h>
 #include <arpa/inet.h>
+#include <signal.h>
 
+#define PATHSIZE 100
 #define PORT "7054" // the port client will be connecting to
 #define MAXDATASIZE 256 // max number of bytes we can get at once
 // get sockaddr, IPv4 or IPv6:
@@ -30,6 +32,7 @@ int main(int argc, char *argv[]) {
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
+    char cmd[MAXDATASIZE];
     char* serverIp;
     int option = 0;
 
@@ -82,16 +85,16 @@ int main(int argc, char *argv[]) {
         exit(1);
     }
     buf[numbytes] = '\0';
-    
+
     printf("received: %s \n", buf);
-    
-    
+
+
     //join - send option 1
     char command[MAXDATASIZE];
     memset(command, '\0', MAXDATASIZE);
     strcat(command, "1 ");
     strcat(command, argv[1]); //append username
-    if (send(sockfd, command, MAXDATASIZE-1, 0) == -1) {
+    if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
         perror("send");
         close(sockfd);
         exit(0);
@@ -114,26 +117,53 @@ int main(int argc, char *argv[]) {
             scanf("%d", &option);
             continue;
         }
-        
+
         //Publish
-        if(option == 1) {
+        if (option == 1) {
             //send option 2 
+            printf("Enter path of folder or file to publish: ");
+            char path[PATHSIZE];
+            scanf("%s", path);
+
+
+            memset(cmd, '\0', MAXDATASIZE);
+            strcat(cmd, "./publish.sh ");
+            strcat(cmd, path);
+            strcat(cmd, " ");
+            strcat(cmd, s); //append server ip address
+            strcat(cmd, " ");
+            strcat(cmd, PORT); //append server port number
+
+            int ret;
+            if ((ret = system(cmd)) == -1) {
+                perror("write to clientlist");
+            }
+
+            if (WIFSIGNALED(ret) &&
+                    (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
+                perror("write to clientlist");
+            }
+
+            option = 0;
+
+
         }
-        
+
         //Search & Fetch
-        if(option==2){
+        if (option == 2) {
             //send option 3
-            
+
         }
-        
+
         //quit
         if (option == 3) {
 
             //send option 4   
             memset(command, '\0', MAXDATASIZE);
             strcat(command, "4 ");
-            strcat(command, argv[1]);
-            if (send(sockfd, command, MAXDATASIZE-1, 0) == -1) {
+            strcat(command, argv[1]); //append username
+
+            if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
                 perror("send");
                 close(sockfd);
                 exit(0);
