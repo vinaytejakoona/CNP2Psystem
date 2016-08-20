@@ -123,27 +123,6 @@ int main(void) {
 
 
 
-                        //store socket and username in file
-
-                        char newsockfd[5];
-                        snprintf(newsockfd,5,"%d", newfd);
-                        memset(cmd, '\0', MAXDATASIZE);
-                        strcat(cmd, "echo ");
-                        strcat(cmd, newsockfd);
-                        strcat(cmd, " ");
-                        strcat(cmd, username);
-                        strcat(cmd, " >> clientlist");
-
-                        int ret;
-                        if ((ret = system(cmd)) == -1) {
-                            perror("write to clientlist");
-                        }
-
-                        if (WIFSIGNALED(ret) &&
-                                (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
-                            perror("write to clientlist");
-                        }
-
                         //act on sockets to write to 
 
                         if (send(newfd, "connected", 9, 0) == -1) {
@@ -169,41 +148,86 @@ int main(void) {
 
                         //data from socket i is in buf
 
-                        
+
 
                         //receive options
                         memset(cmd, '\0', MAXDATASIZE);
-                        int option = (int) buf[0];
+                        int option = buf[0] - '0';
 
-                        
+
                         memset(username, '\0', USERNAMESIZE);
                         strncpy(username, buf + 2, USERNAMESIZE - 1);
 
 
-                        printf("server: option: %d , user: %s ", option, username);
-                        memset(buf, '\0', MAXDATASIZE);
-                        strcat(buf, "hello ");
-                        strcat(buf, username);
-                        strcat(buf, " \n you joined successfully \n");
-                        if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
-                            perror("send");
-                            exit(0);
+                        printf("server: option: %d , user: %s \n", option, username);
+
+                        //join 
+                        if (option == 1) {
+
+                            //store socket and username in file
+
+                            char newsockfd[5];
+                            snprintf(newsockfd, 5, "%d", i);
+                            memset(cmd, '\0', MAXDATASIZE);
+                            strcat(cmd, "echo ");
+                            strcat(cmd, username);
+                            strcat(cmd, " ");
+                            strcat(cmd, newsockfd);
+                            strcat(cmd, " >> clientlist");
+
+                            int ret;
+                            if ((ret = system(cmd)) == -1) {
+                                perror("write to clientlist");
+                            }
+
+                            if (WIFSIGNALED(ret) &&
+                                    (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
+                                perror("write to clientlist");
+                            }
+
+
+                            memset(buf, '\0', MAXDATASIZE);
+                            strcat(buf, "hello ");
+                            strcat(buf, username);
+                            strcat(buf, " \n you joined successfully \n");
+                            if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
+                                perror("send");
+                                exit(0);
+                            }
+                        }
+
+                        //publish
+                        if (option == 2) {
+
+                        }
+
+                        //search & fetch
+                        if (option == 3) {
+
+                        }
+
+                        //quit
+                        if (option == 4) {
+
+                            //remove user from clientlist
+                            /*memset(cmd, '\0', MAXDATASIZE);
+                            strcat(cmd, "./");
+                            strcat(cmd, i);
+                            strcat(cmd, " ");
+                            strcat(cmd, username);
+                            strcat(cmd, " >> clientlist");*/
+
+                            int ret;
+                            if ((ret = system(cmd)) == -1) {
+                                perror("write to clientlist");
+                            }
+
                         }
 
 
 
 
-                        /*for (j = 0; j <= fdmax; j++) {
-                            // send to everyone!                          
-                            if (FD_ISSET(j, &master)) {
-                                // except the listener and ourselves                              
-                                if (j != listener && j != i) {
-                                    if (send(j, buf, nbytes, 0) == -1) {
-                                        perror("send");
-                                    }
-                                }
-                            }
-                        }*/
+
                     }
                 } // END handle data from client
             } // END got new incoming connection
