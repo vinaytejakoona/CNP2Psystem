@@ -1,10 +1,4 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
-/*
  ** selectserver.c -- a cheezy multiperson chat server
  */
 #include <stdio.h>
@@ -45,6 +39,7 @@ int main(void) {
     char buf[MAXDATASIZE]; // buffer for client data
     char cmd[MAXDATASIZE];
     char username[USERNAMESIZE];
+    char socketstring[5];
     int nbytes;
     char remoteIP[INET6_ADDRSTRLEN];
     int yes = 1; // for setsockopt() SO_REUSEADDR, below
@@ -166,13 +161,13 @@ int main(void) {
 
                             //store socket and username in file
 
-                            char newsockfd[5];
-                            snprintf(newsockfd, 5, "%d", i);
+                            
+                            snprintf(socketstring, 5, "%d", i);
                             memset(cmd, '\0', MAXDATASIZE);
                             strcat(cmd, "echo ");
                             strcat(cmd, username);
                             strcat(cmd, " ");
-                            strcat(cmd, newsockfd);
+                            strcat(cmd, socketstring);
                             strcat(cmd, " >> clientlist");
 
                             int ret;
@@ -210,16 +205,16 @@ int main(void) {
                         if (option == 4) {
 
                             //remove user from clientlist
-                            /*memset(cmd, '\0', MAXDATASIZE);
-                            strcat(cmd, "./");
-                            strcat(cmd, i);
+                            snprintf(socketstring, 5, "%d", i);
+                            memset(cmd, '\0', MAXDATASIZE);
+                            strcat(cmd, "./removeclient.sh ");
+                            strcat(cmd, username);                            
                             strcat(cmd, " ");
-                            strcat(cmd, username);
-                            strcat(cmd, " >> clientlist");*/
-
+                            strcat(cmd, socketstring);            
+                            
                             int ret;
                             if ((ret = system(cmd)) == -1) {
-                                perror("write to clientlist");
+                                perror("remove from clientlist");
                             }
 
                         }
