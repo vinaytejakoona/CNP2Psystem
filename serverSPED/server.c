@@ -1,4 +1,10 @@
 /*
+ * To change this license header, choose License Headers in Project Properties.
+ * To change this template file, choose Tools | Templates
+ * and open the template in the editor.
+ */
+
+/*
  ** selectserver.c -- a cheezy multiperson chat server
  */
 #include <stdio.h>
@@ -14,6 +20,7 @@
 #include <signal.h>
 #define USERNAMESIZE 11
 #define MAXDATASIZE 256
+#define PATHSIZE 101
 
 
 #define PORT "7054" // port we're listening on
@@ -36,10 +43,11 @@ int main(void) {
     int newfd; // newly accept()ed socket descriptor
     struct sockaddr_storage remoteaddr; // client address
     socklen_t addrlen;
-    char buf[MAXDATASIZE]; // buffer for client data
-    char cmd[MAXDATASIZE];
+    char buf[MAXDATASIZE];  
+    char cmd[MAXDATASIZE]; // for local execution 
     char username[USERNAMESIZE];
     char socketstring[5];
+    
     int nbytes;
     char remoteIP[INET6_ADDRSTRLEN];
     int yes = 1; // for setsockopt() SO_REUSEADDR, below
@@ -77,6 +85,9 @@ int main(void) {
     }
     freeaddrinfo(ai); // all done with this
     // listen
+
+    printf("server: waiting for connections \n");
+
     if (listen(listener, 10) == -1) {
         perror("listen");
         exit(3);
@@ -86,6 +97,8 @@ int main(void) {
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
     // main loop
+    
+
     for (;;) {
         read_fds = master; // copy it
         write_fds = master;
@@ -150,8 +163,9 @@ int main(void) {
                         int option = buf[0] - '0';
 
 
-                        memset(username, '\0', USERNAMESIZE);
-                        strncpy(username, buf + 2, USERNAMESIZE - 1);
+                        memset(username, ' ', USERNAMESIZE);
+                        strncpy(username, buf + 2,USERNAMESIZE-1);
+                        username[USERNAMESIZE-1]='\0';
 
 
                         printf("server: option: %d , user: %s \n", option, username);
@@ -194,10 +208,57 @@ int main(void) {
                         //publish
                         if (option == 2) {
 
+                            char pathstring[PATHSIZE];
+
+                            memset(pathstring,' ', PATHSIZE);
+                            strncpy(pathstring, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
+                            pathstring[PATHSIZE-1]='\0';
+
+                            // put published path in a file 
+                            strcat(cmd, "echo ");
+                            strcat(cmd, pathstring);                            
+                            strcat(cmd, " >> ");
+                            strncat(cmd, username, USERNAMESIZE-1);                                        
+                            
+                            int ret;
+                            if ((ret = system(cmd)) == -1) {
+                                perror("remove from clientlist");
+                            }
+
+                            memset(buf, '\0', MAXDATASIZE);
+                            strcat(buf, pathstring);
+                            strcat(buf, " is published successfully");
+                           
+                            if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
+                                perror("send");
+                                exit(0);
+                            }
+
+
                         }
 
                         //search & fetch
                         if (option == 3) {
+
+                            char searchKey[PATHSIZE];
+
+                            memset(searchKey,'\0', PATHSIZE);
+                            strncpy(searchKey, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
+
+
+                            //write awk command to search all files
+                            strcat(cmd, "");
+                            strcat(cmd, searchKey);                            
+                            strcat(cmd, " >> ");
+                            strncat(cmd, username, USERNAMESIZE-1);                                        
+                            
+                            int ret;
+                            if ((ret = system(cmd)) == -1) {
+                                perror("remove from clientlist");
+                            }
+                            
+
+
 
                         }
 
@@ -206,8 +267,8 @@ int main(void) {
 
                             //remove user from clientlist
                             snprintf(socketstring, 5, "%d", i);
-                            memset(cmd, '\0', MAXDATASIZE);
-                            strcat(cmd, "./removeclient.sh ");
+                            memset(cmd, '\0', MAXDATASIZE);                            
+                            strcat(cmd, "sed -i \"/$1 $2/d\" clientlist ");
                             strcat(cmd, username);                            
                             strcat(cmd, " ");
                             strcat(cmd, socketstring);            
