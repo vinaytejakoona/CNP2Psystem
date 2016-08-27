@@ -13,12 +13,13 @@
 #include <arpa/inet.h>
 #include <signal.h>
 
-#define PATHSIZE 100
+#define PATHSIZE 101
 #define PORT "7054" // the port client will be connecting to
 #define MAXDATASIZE 256 // max number of bytes we can get at once
+#define USERNAMESIZE 11
 // get sockaddr, IPv4 or IPv6:
 
-void *get_in_addr(struct sockaddr *sa) {
+ void *get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
         return &(((struct sockaddr_in*) sa)->sin_addr);
     }
@@ -28,11 +29,13 @@ void *get_in_addr(struct sockaddr *sa) {
 int main(int argc, char *argv[]) {
 
     int sockfd, numbytes;
-    char buf[MAXDATASIZE];
+    char buf[MAXDATASIZE]; // recv buffer
     struct addrinfo hints, *servinfo, *p;
     int rv;
     char s[INET6_ADDRSTRLEN];
-    char cmd[MAXDATASIZE];
+    char command[MAXDATASIZE]; //To send to server
+    char cmd[MAXDATASIZE]; // Execute at local machine
+    char username[USERNAMESIZE];
     char* serverIp;
     int option = 0;
 
@@ -51,31 +54,31 @@ int main(int argc, char *argv[]) {
     // loop through all the results and connect to the first we can
     for (p = servinfo; p != NULL; p = p->ai_next) {
         if ((sockfd = socket(p->ai_family, p->ai_socktype,
-                p->ai_protocol)) == -1) {
+            p->ai_protocol)) == -1) {
             perror("client: socket");
-            continue;
-        }
-
-        int yes = 1;
-        if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
-            perror("setsockopt");
-            exit(1);
-        }
-
-        if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
-            close(sockfd);
-            perror("client: connect");
-            continue;
-        }
-        break;
+        continue;
     }
-    if (p == NULL) {
-        fprintf(stderr, "client: failed to connect\n");
-        return 2;
+
+    int yes = 1;
+    if (setsockopt(sockfd, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+        perror("setsockopt");
+        exit(1);
     }
-    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),
-            s, sizeof s);
-    printf("client: connecting to %s\n", s);
+
+    if (connect(sockfd, p->ai_addr, p->ai_addrlen) == -1) {
+        close(sockfd);
+        perror("client: connect");
+        continue;
+    }
+    break;
+}
+if (p == NULL) {
+    fprintf(stderr, "client: failed to connect\n");
+    return 2;
+}
+inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),
+    s, sizeof s);
+printf("client: connecting to %s\n", s);
 
     freeaddrinfo(servinfo); // all done with this structure
 
@@ -90,10 +93,13 @@ int main(int argc, char *argv[]) {
 
 
     //join - send option 1
-    char command[MAXDATASIZE];
-    memset(command, '\0', MAXDATASIZE);
+    memset(username, ' ', USERNAMESIZE);
+    strncpy(username,argv[1],strlen(argv[1]));
+    username[USERNAMESIZE-1]='\0';
+
+    memset(command,'\0',MAXDATASIZE);
     strcat(command, "1 ");
-    strcat(command, argv[1]); //append username
+    strncat(command, username, USERNAMESIZE-1); //append username
     if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
         perror("send");
         close(sockfd);
@@ -113,7 +119,7 @@ int main(int argc, char *argv[]) {
 
         if (option == 0) {
             // menu
-            printf("----MENU---- \n Enter a Number From following \n 1. Publish \n 2. Search & Fetch \n 3. Quit \n ");
+            printf("\n----MENU---- \n Enter a Number From following \n 1. Publish \n 2. Search & Fetch \n 3. Quit \n ");
             scanf("%d", &option);
             continue;
         }
@@ -121,29 +127,39 @@ int main(int argc, char *argv[]) {
         //Publish
         if (option == 1) {
             //send option 2 
-            printf("Enter path of folder or file to publish: ");
-            char path[PATHSIZE];
-            scanf("%s", path);
+            printf("Enter path of file to publish: ");
 
 
-            memset(cmd, '\0', MAXDATASIZE);
-            strcat(cmd, "./publish.sh ");
-            strcat(cmd, path);
-            strcat(cmd, " ");
-            strcat(cmd, s); //append server ip address
-            strcat(cmd, " ");
-            strcat(cmd, PORT); //append server port number
+            char pathstring[PATHSIZE];
+            memset(pathstring,' ',PATHSIZE);
 
-            int ret;
-            if ((ret = system(cmd)) == -1) {
-                perror("write to clientlist");
+            scanf("%s", pathstring);
+
+            strncpy(pathstring,pathstring,strlen(pathstring));
+
+            pathstring[PATHSIZE-1]='\0';
+
+            memset(command, '\0', MAXDATASIZE);
+            strcat(command, "2 ");
+            
+            strncat(command, username, USERNAMESIZE-1); //append username
+            
+
+            strncat(command, pathstring, PATHSIZE-1);
+            printf("command sent: %s", command);
+
+            if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
+                perror("send");
+                close(sockfd);
+                exit(0);
             }
-
-            if (WIFSIGNALED(ret) &&
-                    (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
-                perror("write to clientlist");
+            if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
+                perror("recv");
+                close(sockfd);
+                exit(1);
             }
-
+            buf[numbytes] = '\0';
+            printf("received: %s ", buf);
             option = 0;
 
 
@@ -152,6 +168,41 @@ int main(int argc, char *argv[]) {
         //Search & Fetch
         if (option == 2) {
             //send option 3
+
+            printf("Enter key to search: ");
+
+
+            char searchKey[PATHSIZE];
+            memset(searchKey,' ',PATHSIZE);
+
+            scanf("%s", searchKey);
+
+            strncpy(searchKey,searchKey,strlen(searchKey));
+
+            searchKey[PATHSIZE-1]='\0';
+
+            memset(command, '\0', MAXDATASIZE);
+            strcat(command, "3 ");
+            
+            strncat(command, username, USERNAMESIZE-1); //append username
+            
+
+            strncat(command, searchKey, PATHSIZE-1);
+            printf("command sent: %s", command);
+
+            if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
+                perror("send");
+                close(sockfd);
+                exit(0);
+            }
+            if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
+                perror("recv");
+                close(sockfd);
+                exit(1);
+            }
+            buf[numbytes] = '\0';
+            printf("received: %s ", buf);
+            option = 0;
 
         }
 
