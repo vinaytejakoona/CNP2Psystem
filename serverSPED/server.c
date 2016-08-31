@@ -1,11 +1,5 @@
 /*
- * To change this license header, choose License Headers in Project Properties.
- * To change this template file, choose Tools | Templates
- * and open the template in the editor.
- */
-
-/*
- ** selectserver.c -- a cheezy multiperson chat server
+ server
  */
 #include <stdio.h>
 #include <stdlib.h>
@@ -26,13 +20,53 @@
 #define PORT "7054" // port we're listening on
 // get sockaddr, IPv4 or IPv6:
 
-void *get_in_addr(struct sockaddr *sa) {
+ void *get_in_addr(struct sockaddr *sa) {
     if (sa->sa_family == AF_INET) {
         return &(((struct sockaddr_in*) sa)->sin_addr);
 
     }
     return &(((struct sockaddr_in6*) sa)->sin6_addr);
 }
+
+int send_file(int  sock, char  *file_name)
+{
+    int    sent_count; /* how many sending chunks, for debugging */
+    ssize_t read_bytes, /* bytes read from local file */
+    sent_bytes, /* bytes sent to connected socket */
+    sent_file_size; 
+    char  send_buf[MAX_SEND_BUF]; /* max chunk size for sending file */
+    char   * errmsg_notfound = "File not found\n";
+    int  f; /* file handle for reading local file*/
+    sent_count =  0 ;
+    sent_file_size =  0 ; /* attempt to open requested file for reading */
+    if( (f = open(file_name, O_RDONLY)) < 0 )  /* can't open requested file */
+    {
+        perror(file_name);
+        if( (sent_bytes = send(sock, errmsg_notfound , strlen(errmsg_notfound), 0)) < 0 )
+        {
+          perror( "send error");
+          return  -1;
+      }
+  }
+  else/* open file successful */
+  {
+    printf("Sending file:  %s \n",file_name);
+    while( (read_bytes = read(f, send_buf, MAX_RECV_BUF)) >  0 )
+    {
+        if ( (sent_bytes = send(sock, send_buf, read_bytes,0)) < read_bytes )
+        {
+            perror("send error");
+            return  -1;
+        }
+        sent_count++;
+        sent_file_size += sent_bytes;
+    }
+    close(f);
+}/* end else */
+printf("Done with this client. Sent %d  bytes in %d  send(s) \n\n", sent_file_size, sent_count);
+return sent_count;
+}
+
 
 int main(void) {
     fd_set master; // master file descriptor list
@@ -96,6 +130,18 @@ int main(void) {
     FD_SET(listener, &master);
     // keep track of the biggest file descriptor
     fdmax = listener; // so far, it's this one
+
+
+
+    // create required directories
+    memset(cmd, '\0', MAXDATASIZE);
+    strcat(cmd, "mkdir -p  publishedFiles");
+
+
+    int ret;
+    if ((ret = system(cmd)) == -1) {
+        perror("create publishedFiles dierectory");
+    }
     // main loop
     
 
@@ -113,8 +159,8 @@ int main(void) {
                     // handle new connections
                     addrlen = sizeof remoteaddr;
                     newfd = accept(listener,
-                            (struct sockaddr *) &remoteaddr,
-                            &addrlen);
+                        (struct sockaddr *) &remoteaddr,
+                        &addrlen);
                     if (newfd == -1) {
                         perror("accept");
                     } else {
@@ -123,11 +169,11 @@ int main(void) {
                             fdmax = newfd;
                         }
                         printf("server: new connection from %s on "
-                                "socket %d\n",
-                                inet_ntop(remoteaddr.ss_family,
+                            "socket %d\n",
+                            inet_ntop(remoteaddr.ss_family,
                                 get_in_addr((struct sockaddr*) &remoteaddr),
                                 remoteIP, INET6_ADDRSTRLEN),
-                                newfd);
+                            newfd);
 
 
 
@@ -175,7 +221,7 @@ int main(void) {
 
                             //store socket and username in file
 
-                            
+
                             snprintf(socketstring, 5, "%d", i);
                             memset(cmd, '\0', MAXDATASIZE);
                             strcat(cmd, "echo ");
@@ -190,101 +236,104 @@ int main(void) {
                             }
 
                             if (WIFSIGNALED(ret) &&
-                                    (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
+                                (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
                                 perror("write to clientlist");
-                            }
-
-
-                            memset(buf, '\0', MAXDATASIZE);
-                            strcat(buf, "hello ");
-                            strcat(buf, username);
-                            strcat(buf, " \n you joined successfully \n");
-                            if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
-                                perror("send");
-                                exit(0);
-                            }
                         }
+
+
+                        memset(buf, '\0', MAXDATASIZE);
+                        strcat(buf, "hello ");
+                        strcat(buf, username);
+                        strcat(buf, " \n you joined successfully \n");
+                        if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
+                            perror("send");
+                            exit(0);
+                        }
+                    }
 
                         //publish
-                        if (option == 2) {
+                    if (option == 2) {
 
-                            char pathstring[PATHSIZE];
+                        char pathstring[PATHSIZE];
 
-                            memset(pathstring,' ', PATHSIZE);
-                            strncpy(pathstring, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
-                            pathstring[PATHSIZE-1]='\0';
+                        memset(pathstring,' ', PATHSIZE);
+                        strncpy(pathstring, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
+                        pathstring[PATHSIZE-1]='\0';
 
                             // put published path in a file 
-                            strcat(cmd, "echo ");
-                            strcat(cmd, pathstring);                            
-                            strcat(cmd, " >> ");
-                            strncat(cmd, username, USERNAMESIZE-1);                                        
-                            
-                            int ret;
-                            if ((ret = system(cmd)) == -1) {
-                                perror("remove from clientlist");
-                            }
+                        strcat(cmd, "echo ");
+                        strcat(cmd, pathstring);                            
+                        strcat(cmd, " >> ./publishedFiles/");
+                        strncat(cmd, username, USERNAMESIZE-1);                                        
 
-                            memset(buf, '\0', MAXDATASIZE);
-                            strcat(buf, pathstring);
-                            strcat(buf, " is published successfully");
-                           
-                            if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
-                                perror("send");
-                                exit(0);
-                            }
-
-
+                        int ret;
+                        if ((ret = system(cmd)) == -1) {
+                            perror("remove from clientlist");
                         }
+
+                        memset(buf, '\0', MAXDATASIZE);
+                        strcat(buf, pathstring);
+                        strcat(buf, " is published successfully");
+
+                        if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
+                            perror("send");
+                            exit(0);
+                        }
+
+
+                    }
 
                         //search & fetch
-                        if (option == 3) {
+                    if (option == 3) {
 
-                            char searchKey[PATHSIZE];
+                        char searchKey[PATHSIZE];
 
-                            memset(searchKey,'\0', PATHSIZE);
-                            strncpy(searchKey, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
-
-
-                            //write awk command to search all files
-                            strcat(cmd, "");
-                            strcat(cmd, searchKey);                            
-                            strcat(cmd, " >> ");
-                            strncat(cmd, username, USERNAMESIZE-1);                                        
-                            
-                            int ret;
-                            if ((ret = system(cmd)) == -1) {
-                                perror("remove from clientlist");
-                            }
-                            
+                        memset(searchKey,'\0', PATHSIZE);
+                        strncpy(searchKey, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
 
 
+                        //write awk command to search all files and store results in searchResults file
+                        strcat(cmd, "cat * | awk /");
+                        strcat(cmd, searchKey);   
+                        strcat(cmd, "/");                            
+                        strcat(cmd, " >> searchResults");                                      
 
+                        int ret;
+                        if ((ret = system(cmd)) == -1) {
+                            perror("remove from clientlist");
                         }
 
-                        //quit
-                        if (option == 4) {
+                        //send contents of searchResults
 
-                            //remove user from clientlist
-                            snprintf(socketstring, 5, "%d", i);
-                            memset(cmd, '\0', MAXDATASIZE);                            
-                            strcat(cmd, "sed -i \"/$1 $2/d\" clientlist ");
-                            strcat(cmd, username);                            
-                            strcat(cmd, " ");
-                            strcat(cmd, socketstring);            
-                            
-                            int ret;
-                            if ((ret = system(cmd)) == -1) {
-                                perror("remove from clientlist");
-                            }
-
-                        }
-
-
+                        send_file(i,"./publishedFiles/searchResults");
 
 
 
                     }
+
+                        //quit
+                    if (option == 4) {
+
+                            //remove user from clientlist
+                        snprintf(socketstring, 5, "%d", i);
+                        memset(cmd, '\0', MAXDATASIZE);                            
+                        strcat(cmd, "sed -i \"/$1 $2/d\" clientlist ");
+                        strcat(cmd, username);                            
+                        strcat(cmd, " ");
+                        strcat(cmd, socketstring);            
+
+                        int ret;
+                        if ((ret = system(cmd)) == -1) {
+                            perror("remove from clientlist");
+                        }
+
+                    }
+
+
+
+
+
+                }
                 } // END handle data from client
             } // END got new incoming connection
         } // END looping through file descriptors
