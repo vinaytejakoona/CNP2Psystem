@@ -12,11 +12,15 @@
 #include <sys/socket.h>
 #include <arpa/inet.h>
 #include <signal.h>
+#include <fcntl.h>
+
 
 #define PATHSIZE 101
 #define PORT "7054" // the port client will be connecting to
 #define MAXDATASIZE 256 // max number of bytes we can get at once
 #define USERNAMESIZE 11
+
+#define SEARCHRESULTS "searchResults"
 // get sockaddr, IPv4 or IPv6:
 
  void *get_in_addr(struct sockaddr *sa) {
@@ -25,47 +29,6 @@
     }
     return &(((struct sockaddr_in6*) sa)->sin6_addr);
 }
-
-
-int recv_file(int sock, char * file_name)
-{
-    char send_str [MAX_SEND_BUF];/* message to be sent to server*/
-    int f; /* file handle for receiving file*/
-    ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
-    int recv_count;/* count of recv() calls*/
-    char recv_str[MAX_RECV_BUF]; /* buffer to hold received data */
-    size_t send_strlen; /* length of transmitted string */
-    sprintf(send_str, "%s \n", file_name); /* add CR/LF (new line) */
-    send_strlen = strlen(send_str); /* length of message to be transmitted */
-    if( (sent_bytes = send(sock, file_name, send_strlen, 0)) <0)
-    {
-            perror("send error");
-                        return -1;
-    }/* attempt to create file to save received data. 0644 = rw-r--r-- */
-    if( (f = open(file_name, O_WRONLY|O_CREAT,0644)) < 0)
-    {
-        perror("error creating file");
-        return -1;
-    }
-    recv_count = 0; /* number of recv() calls required to receive the file */
-    rcvd_file_size = 0; /* size of received file */
-    
-    /* continue receiving until ? (data or close) */
-    while( (rcvd_bytes = recv(sock, recv_str, MAX_RECV_BUF, 0)) > 0)
-    {
-        recv_count++;
-        rcvd_file_size += rcvd_bytes;
-        if(write(f, recv_str, rcvd_bytes) < 0)
-        { 
-            perror("error writing to file");
-            return -1;
-        }
-    }
-    close(f); /* close file*/
-    printf("Client Received: %d bytes in %d recv(s) \n", rcvd_file_size, recv_count);
-    return rcvd_file_size;
-}
-
 
 
 int main(int argc, char *argv[]) {
@@ -162,7 +125,9 @@ printf("client: connecting to %s\n", s);
         if (option == 0) {
             // menu
             printf("\n----MENU---- \n Enter a Number From following \n 1. Publish \n 2. Search & Fetch \n 3. Quit \n ");
-            scanf("%d", &option);
+            memset(cmd,' ',MAXDATASIZE);
+            fgets(cmd, MAXDATASIZE, stdin);
+            sscanf(cmd,"%d",&option);
             continue;
         }
 
@@ -175,7 +140,9 @@ printf("client: connecting to %s\n", s);
             char pathstring[PATHSIZE];
             memset(pathstring,' ',PATHSIZE);
 
-            scanf("%s", pathstring);
+
+            scanf("%s",pathstring);
+
 
             strncpy(pathstring,pathstring,strlen(pathstring));
 
@@ -215,35 +182,80 @@ printf("client: connecting to %s\n", s);
 
 
             char searchKey[PATHSIZE];
-            memset(searchKey,' ',PATHSIZE);
+            memset(searchKey,'\0',PATHSIZE);
 
-            scanf("%s", searchKey);
-
-            strncpy(searchKey,searchKey,strlen(searchKey));
-
-            searchKey[PATHSIZE-1]='\0';
-
+            scanf("%s",searchKey);
+            
             memset(command, '\0', MAXDATASIZE);
             strcat(command, "3 ");
             
             strncat(command, username, USERNAMESIZE-1); //append username
             
 
-            strncat(command, searchKey, PATHSIZE-1);
-            printf("command sent: %s", command);
+            strcat(command, searchKey);
 
-            if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
-                perror("send");
-                close(sockfd);
-                exit(0);
+            printf("command sent: %s ", command);
+
+            
+
+            
+
+            
+                
+                int f; /* file handle for receiving file*/
+                ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
+                int recv_count;/* count of recv() calls*/
+                char recv_str[MAXDATASIZE]; /* buffer to hold received data */                
+                
+
+                if (send(sockfd, command, MAXDATASIZE - 1, 0) == -1) {
+                    perror("send");
+                    close(sockfd);
+                    exit(0);
+                }
+
+
+
+                /* attempt to create file to save received data. 0644 = rw-r--r-- */
+                if( (f = open(SEARCHRESULTS, O_WRONLY|O_CREAT,0644)) < 0)
+                {
+                    perror("error creating file");
+                    return -1;
+                }
+                recv_count = 0; /* number of recv() calls required to receive the file */
+                rcvd_file_size = 0; /* size of received file */
+
+                printf("before while recv\n");
+                /* continue receiving until ? (data or close) */
+                while((rcvd_bytes = recv(sockfd, recv_str, MAXDATASIZE, MSG_DONTWAIT)) >0)
+                {                  
+                    
+                    recv_count++;
+                    rcvd_file_size += rcvd_bytes;
+                    
+                    if(write(f, recv_str, rcvd_bytes) < 0)
+                    { 
+                        perror("error writing to file");
+                        return -1;
+                    }
+                    printf("end while recv \n");
+                }
+                
+                close(f); /* close file*/
+                printf("Client Received: %d bytes in %d recv(s) \n", rcvd_file_size, recv_count);  
+
+
+            memset(cmd, '\0', MAXDATASIZE);
+            //write cat command to print searchResults file
+            strcat(cmd, "cat searchResults");
+
+
+            int ret;
+            if ((ret = system(cmd)) == -1) {
+                perror("print search results");
             }
-            if ((numbytes = recv(sockfd, buf, MAXDATASIZE - 1, 0)) == -1) {
-                perror("recv");
-                close(sockfd);
-                exit(1);
-            }
-            buf[numbytes] = '\0';
-            printf("received: %s ", buf);
+
+
             option = 0;
 
         }
