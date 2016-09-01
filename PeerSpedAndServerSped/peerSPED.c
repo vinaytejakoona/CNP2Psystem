@@ -256,6 +256,8 @@ printf("client: connecting to %s\n", s);
 
                         if (send(newfd, "connected", 9, 0) == -1) {
                             perror("send");
+                             close(serverSocketFD);
+							close(listener);                                        
                             exit(0);
                         }
 
@@ -308,11 +310,13 @@ printf("client: connecting to %s\n", s);
                                     if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
                                         perror("send");
                                         close(serverSocketFD);
+                                         close(listener);
                                         exit(0);
                                     }
                                     if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
                                         perror("recv");
                                         close(serverSocketFD);
+                                         close(listener);
                                         exit(1);
                                     }
                                     buf[numbytes] = '\0';
@@ -344,25 +348,14 @@ printf("client: connecting to %s\n", s);
 
                                     printf("command sent: %s ", command);                             
 
-                                    
-
-                                    
-             
-
 
                                     if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
                                         perror("send");
                                         close(serverSocketFD);
+                                        close(listener);
                                         exit(0);
                                     }
 
-
-
-                                       
-                                  
-
-                                    fflush(stdin);
-                                    option = 0;
 
                                 }
 
@@ -377,8 +370,14 @@ printf("client: connecting to %s\n", s);
                                     if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
                                         perror("send");
                                         close(serverSocketFD);
+                                        close(listener);
                                         exit(0);
                                     }
+
+                                    close(listener);
+                                    close(serverSocketFD);
+                                    exit(0);
+
 
                                     
                                 }      
@@ -392,80 +391,71 @@ printf("client: connecting to %s\n", s);
 
 
 
-                                        int f; /* file handle for receiving file*/
-                                        ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
-                                        int recv_count;/* count of recv() calls*/
-                                        char recv_str[MAXDATASIZE]; /* buffer to hold received data */   
+		                                        int f; /* file handle for receiving file*/
+		                                        ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
+		                                        int recv_count;/* count of recv() calls*/
+		                                        char recv_str[MAXDATASIZE]; /* buffer to hold received data */   
 
 
-                            	 		 /* attempt to create file to save received data. 0644 = rw-r--r-- */
-                                    if( (f = open(SEARCHRESULTS, O_WRONLY|O_CREAT,0644)) < 0)
-                                    {
-                                        perror("error creating file");
-                                        return -1;
-                                    }
-                                        recv_count = 0; /* number of recv() calls required to receive the file */
-                                        rcvd_file_size = 0; /* size of received file */
+                            	 		 		/* attempt to create file to save received data. 0644 = rw-r--r-- */
+			                                    if( (f = open(SEARCHRESULTS, O_WRONLY|O_CREAT,0644)) < 0)
+			                                    {
+			                                        perror("error creating file");
+			                                        return -1;
+			                                    }
+		                                        recv_count = 0; /* number of recv() calls required to receive the file */
+		                                        rcvd_file_size = 0; /* size of received file */
 
-                                    printf("before while recv\n");
-                                        /* continue receiving until ? (data or close) */
+												
+		                                        /* continue receiving until ? (data or close) */
 
-                            	 		while(1)
-                                    	{ 
+		                            	 		while((rcvd_bytes = recv(serverSocketFD, recv_str, MAXDATASIZE, MSG_DONTWAIT))> 0)
+		                                    	{ 
+				                                        	rcvd_file_size += rcvd_bytes;
 
-                                    	       if ((rcvd_bytes = recv(serverSocketFD, recv_str, MAXDATASIZE, MSG_DONTWAIT)) <= 0) {   // got error or connection closed by client
-                                                if (rcvd_bytes == 0) {// connection closed
-                                                     printf("server: socket %d hung up\n", i);
-                                                } else {
-                                                     perror("recv");
-                                                }
-                                                close(i); // bye!
-                                                printf("%d is removed from master \n", i);
-                                                FD_CLR(i, &master); // remove from master set
-                                        		} else {
-                                                    // we got some data from server
+					                                        if(write(f, recv_str, rcvd_bytes) < 0)
+					                                        { 
+					                                            perror("error writing to file");
+					                                            return -1;
+					                                        }
+		                                                                                                
+												}                 
 
-                                                    //data from socket i is in buf
-
-
-
-                                                        //receive options                                             
-                                                }                 
-
-		                                        recv_count++;
-		                                        rcvd_file_size += rcvd_bytes;
-
-		                                        if(write(f, recv_str, rcvd_bytes) < 0)
-		                                        { 
-		                                            perror("error writing to file");
-		                                            return -1;
-		                                        }
-		                                        printf("end while recv \n");
-                                        }
-
-                                        close(f); /* close file*/
-                                    printf("Client Received: %d bytes in %d recv(s) \n", rcvd_file_size, recv_count);  
+				                                        
+		                                     
+		                                        close(f); /* close file*/
+			                                    printf("Client Received: %d bytes in %d recv(s) \n", rcvd_file_size, recv_count);  
 
 
-                                    memset(cmd, '\0', MAXDATASIZE);
-                                    //write cat command to print searchResults file
-                                    strcat(cmd, "cat searchResults");
+			                                    memset(cmd, '\0', MAXDATASIZE);
+			                                    //write cat command to print searchResults file
+
+			                                    printf("search results: \n");
+			                                    strcat(cmd, "cat searchResults");
 
 
-                                    int ret;
-                                    if ((ret = system(cmd)) == -1) {
-                                        perror("print search results");
-                                    }
+			                                    int ret;
+			                                    if ((ret = system(cmd)) == -1) {
+			                                        perror("print search results");
+			                                    }
+
+			                                    option=0;
 
 
-                            	 	}
+                                        } // end act on data from server on option 2
+
+                                       
+
+
+                            	 	} // END handle data from server
                                         
                                   
 
-                                } // END handle data from server
-                    } // END - isset
+                                } // END - isset
+                    } // END looping through file descriptors
 
-                } // END looping through file descriptors
-            } // END for(;;)--and you thought it would never end!
-        return 0;
-} // main 
+                } // END for(;;)--and you thought it would never end!
+
+                return 0;
+} 
+        
