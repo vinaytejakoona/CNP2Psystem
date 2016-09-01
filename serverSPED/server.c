@@ -12,6 +12,8 @@
 #include <arpa/inet.h>
 #include <netdb.h>
 #include <signal.h>
+#include <fcntl.h>
+
 #define USERNAMESIZE 11
 #define MAXDATASIZE 256
 #define PATHSIZE 101
@@ -34,7 +36,7 @@ int send_file(int  sock, char  *file_name)
     ssize_t read_bytes, /* bytes read from local file */
     sent_bytes, /* bytes sent to connected socket */
     sent_file_size; 
-    char  send_buf[MAX_SEND_BUF]; /* max chunk size for sending file */
+    char  send_buf[MAXDATASIZE]; /* max chunk size for sending file */
     char   * errmsg_notfound = "File not found\n";
     int  f; /* file handle for reading local file*/
     sent_count =  0 ;
@@ -47,24 +49,24 @@ int send_file(int  sock, char  *file_name)
           perror( "send error");
           return  -1;
       }
-  }
-  else/* open file successful */
-  {
-    printf("Sending file:  %s \n",file_name);
-    while( (read_bytes = read(f, send_buf, MAX_RECV_BUF)) >  0 )
-    {
-        if ( (sent_bytes = send(sock, send_buf, read_bytes,0)) < read_bytes )
-        {
-            perror("send error");
-            return  -1;
-        }
-        sent_count++;
-        sent_file_size += sent_bytes;
     }
-    close(f);
-}/* end else */
-printf("Done with this client. Sent %d  bytes in %d  send(s) \n\n", sent_file_size, sent_count);
-return sent_count;
+    else/* open file successful */
+    { 
+        printf("Sending file:  %s \n",file_name);
+        while( (read_bytes = read(f, send_buf, MAXDATASIZE)) >  0 )
+        {
+            if ( (sent_bytes = send(sock, send_buf, read_bytes,0)) < read_bytes )
+            {
+                perror("send error");
+                return  -1;
+            }
+                sent_count++;
+                sent_file_size += sent_bytes;
+            }
+        close(f);
+    }/* end else */
+    printf("Done with this client. Sent %d  bytes in %d  send(s) \n\n", sent_file_size, sent_count);
+    return sent_count;
 }
 
 
@@ -291,12 +293,20 @@ int main(void) {
                         memset(searchKey,'\0', PATHSIZE);
                         strncpy(searchKey, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
 
+                        printf("searchKey : %s",searchKey);
+
+                        puts(searchKey);                  
+
+                        
 
                         //write awk command to search all files and store results in searchResults file
-                        strcat(cmd, "cat * | awk /");
+                        memset(cmd, '\0', MAXDATASIZE); 
+                        strcat(cmd, "cat ./publishedFiles/* | awk /");
                         strcat(cmd, searchKey);   
-                        strcat(cmd, "/");                            
-                        strcat(cmd, " >> searchResults");                                      
+                        strcat(cmd, "/ > searchResults");                            
+                        
+
+                        puts(cmd);                                   
 
                         int ret;
                         if ((ret = system(cmd)) == -1) {
@@ -305,7 +315,7 @@ int main(void) {
 
                         //send contents of searchResults
 
-                        send_file(i,"./publishedFiles/searchResults");
+                        send_file(i,"searchResults");
 
 
 
