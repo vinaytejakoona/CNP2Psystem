@@ -24,7 +24,7 @@
 #define SPORT "7054" // port server is listening on
 
 
-#define PORT "7055" // port peer is listening on
+#define PORT "7056" // port peer is listening on
 // get sockaddr, IPv4 or IPv6:
 
  void *get_in_addr(struct sockaddr *sa) {
