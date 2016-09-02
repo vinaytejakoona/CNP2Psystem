@@ -251,21 +251,21 @@ int main(void) {
                             if (WIFSIGNALED(ret) &&
                                 (WTERMSIG(ret) == SIGINT || WTERMSIG(ret) == SIGQUIT)) {
                                 perror("write to clientlist");
-                        }
+                            }
 
 
-                        memset(buf, '\0', MAXDATASIZE);
-                        strcat(buf, "hello ");
-                        strcat(buf, username);
-                        strcat(buf, " \n you joined successfully \n");
-                        if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
-                            perror("send");
-                            exit(0);
+                            memset(buf, '\0', MAXDATASIZE);
+                            strcat(buf, "hello ");
+                            strcat(buf, username);
+                            strcat(buf, " \n you joined successfully \n");
+                            if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
+                                perror("send");
+                                exit(0);
+                            }
                         }
-                    }
 
                         //publish
-                    if (option == 2) {
+                    else if (option == 2) {
 
                         char pathstring[PATHSIZE];
 
@@ -296,8 +296,8 @@ int main(void) {
 
                     }
 
-                        //search & fetch
-                    if (option == 3) {
+                        //search 
+                    else if (option == 3) {
 
                         char searchKey[PATHSIZE];
 

@@ -25,7 +25,7 @@
 #define SPORT "7054" // port server is listening on
 
 
-#define PORT "7055" // port peer is listening on
+#define PORT "7056" // port peer is listening on
 // get sockaddr, IPv4 or IPv6:
 
  void *get_in_addr(struct sockaddr *sa) {
@@ -255,7 +255,7 @@ printf("client: connecting to %s\n", s);
         printf("active sockets: %d %d %d",serverSocketFD, listener, STDIN_FILENO);
 
         if (option == 0) {        
-            printf("\n----MENU---- \n Enter a Number From following \n 1. Publish \n 2. Search & Fetch \n 3. Quit \n ");            
+            printf("\n----MENU---- \n Enter a Number From following \n 1. Publish \n 2. Search  \n 3. Fetch \n 4. Quit \n ");            
         }
 
         read_fds = master; // copy it
@@ -360,7 +360,7 @@ printf("client: connecting to %s\n", s);
 
                                 }
 
-                                //Search & Fetch
+                                //Search 
                                 if (option == 2) {
                                     //send option 3
 
@@ -392,11 +392,84 @@ printf("client: connecting to %s\n", s);
 
 
                                 }
+                                else if(option == 3){
+
+ 								 //connect to peer and fetch file
+
+
+
+                                	char addressBuffer[INET_ADDRSTRLEN];
+                                    char peerPort[10];
+
+                                	printf("Enter IP Address of Peer: ");
+
+                                    scanf("%s",addressBuffer);
+
+                                    printf("Enter PORT of Peer: ");
+
+                                    scanf("%s",peerPort);
+
+                                	 				struct addrinfo hints,*ai, *peerinfo, *p;
+                                	 				int peerSocketFD;
+
+
+													memset(&hints, 0, sizeof hints);
+												    hints.ai_family = AF_UNSPEC;
+												    hints.ai_socktype = SOCK_STREAM;
+												    if ((rv = getaddrinfo(addressBuffer, peerPort, &hints, &peerinfo)) != 0) {
+												        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+												        return 1;
+												    }
+
+
+												        // loop through all the results and connect to the first we can
+												    for (p = peerinfo; p != NULL; p = p->ai_next) {
+												        if ((peerSocketFD = socket(p->ai_family, p->ai_socktype,
+															            p->ai_protocol)) == -1) {
+															            perror("client: socket");
+															        continue;
+															    }
+
+															    int yes = 1;
+															    if (setsockopt(peerSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+															        perror("setsockopt");
+															        exit(1);
+															    }
+
+															    if (connect(peerSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
+															        close(peerSocketFD);
+															        perror("client: connect");
+															        continue;
+															    }
+															    break;
+												 	}
+
+
+												if (p == NULL) {
+												    fprintf(stderr, "client: failed to connect to peer\n");
+												    return 2;
+												}
+												inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
+												printf("client: connecting to %s\n", s);
+
+												        freeaddrinfo(peerinfo); // all done with this structure
+
+												        if ((numbytes = recv(peerSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
+												            perror("recv");
+												            close(peerSocketFD);
+												            exit(1);
+												        }
+												        buf[numbytes] = '\0';
+
+												        printf("received: %s \n", buf);
+
+
+                                }
 
                                 //quit
-                                if (option == 3) {
+                                if (option == 4) {
 
-                                    //send option 4   
+                                    //send option 4  
                                     memset(command, '\0', MAXDATASIZE);
                                     strcat(command, "4 ");
                                     strcat(command, argv[1]); //append username
