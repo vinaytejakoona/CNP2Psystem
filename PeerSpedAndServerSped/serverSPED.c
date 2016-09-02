@@ -216,6 +216,8 @@ int main(void) {
                         username[USERNAMESIZE-1]='\0';
 
 
+
+
                         printf("server: option: %d , user: %s \n", option, username);
 
                         //join 
@@ -223,11 +225,20 @@ int main(void) {
 
                             //store socket and username in file
 
+                            char addressBuffer[INET_ADDRSTRLEN];
+
+                            memset(addressBuffer, ' ', INET_ADDRSTRLEN);
+                            strncpy(addressBuffer, buf+2+(USERNAMESIZE-2)+1,INET_ADDRSTRLEN);
+                            //addressBuffer[INET_ADDRSTRLEN]='\0';
+
+
 
                             snprintf(socketstring, 5, "%d", i);
                             memset(cmd, '\0', MAXDATASIZE);
                             strcat(cmd, "echo ");
                             strcat(cmd, username);
+                            strcat(cmd, " ");
+                            strcat(cmd, addressBuffer);
                             strcat(cmd, " ");
                             strcat(cmd, socketstring);
                             strcat(cmd, " >> clientlist");
