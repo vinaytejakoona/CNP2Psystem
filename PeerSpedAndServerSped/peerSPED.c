@@ -13,6 +13,7 @@
 #include <netdb.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
 
 #define PATHSIZE 101
 
@@ -170,6 +171,37 @@ printf("client: connecting to %s\n", s);
         printf("received: %s \n", buf);
 
 
+
+
+        //get local address and port
+
+        struct ifaddrs * ifAddrStruct=NULL;
+    	struct ifaddrs * ifa=NULL;
+    	void * tmpAddrPtr=NULL;
+
+    	getifaddrs(&ifAddrStruct);
+
+	    for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+	        if (!ifa->ifa_addr) {
+	            continue;
+	        }
+	        if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
+	            // is a valid IP4 Address
+	            tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+	            char addressBuffer[INET_ADDRSTRLEN];
+	            inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+	            printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
+	        } else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
+	            // is a valid IP6 Address
+	            tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+	            char addressBuffer[INET6_ADDRSTRLEN];
+	            inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+	            printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
+	        }
+	    }
+	    if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+
+
          //join - send option 1
         memset(username, ' ', USERNAMESIZE);
         strncpy(username,argv[1],strlen(argv[1]));
@@ -178,6 +210,7 @@ printf("client: connecting to %s\n", s);
         memset(command,'\0',MAXDATASIZE);
         strcat(command, "1 ");
         strncat(command, username, USERNAMESIZE-1); //append username
+        
         if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
             perror("send");
             close(serverSocketFD);
