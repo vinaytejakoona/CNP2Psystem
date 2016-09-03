@@ -18,6 +18,7 @@
 #define MAXDATASIZE 256
 #define PATHSIZE 101
 
+#define SEARCHRESULTS "searchResults"
 
 #define PORT "7054" // port we're listening on
 // get sockaddr, IPv4 or IPv6:
@@ -53,19 +54,9 @@ int send_file(int  sock, char  *file_name)
     else/* open file successful */
     { 
         printf("Sending file:  %s \n",file_name);
-        while( (read_bytes = read(f, send_buf, MAXDATASIZE)) >= 0 )
+        while( (read_bytes = read(f, send_buf, MAXDATASIZE)) > 0 )
         {
 
-            if(read_bytes==0){
-                if (send(sock, "No results found", 16,0)< 0)
-                {
-                perror("send error");
-                return  -1;
-                }
-                else{
-                    break;
-                }
-            }
             if ( (sent_bytes = send(sock, send_buf, read_bytes,0)) < read_bytes )
             {
                 perror("send error");
@@ -337,7 +328,7 @@ int main(void) {
 
                         //send contents of searchResults
 
-                        send_file(i,"searchResults");
+                        send_file(i,SEARCHRESULTS);
 
 
 

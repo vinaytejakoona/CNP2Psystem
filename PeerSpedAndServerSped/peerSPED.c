@@ -25,7 +25,7 @@
 #define SPORT "7054" // port server is listening on
 
 
-#define PORT "7056" // port peer is listening on
+#define PORT "7055" // port peer is listening on
 // get sockaddr, IPv4 or IPv6:
 
  void *get_in_addr(struct sockaddr *sa) {
@@ -37,7 +37,7 @@
  }
 
 
- int   recv_file(int sock, char * file_name)
+ int  recv_file(int sock, char * file_name)
  {
 	char send_str [MAXDATASIZE]; /* message to be sent to server*/
 	int f; /* file handle for receiving file*/
@@ -58,11 +58,11 @@
 	    	recv_count = 0; 	/* number of recv() calls required to receive the file */	  
 	    	rcvd_file_size = 0; 	/* size of received file */
 	    	/* continue receiving until ? (data or close) */
- 		while( (rcvd_bytes = recv(sock, recv_str, MAXDATASIZE, 0)) > 0)
+ 		while( (rcvd_bytes = recv(sock, recv_str, MAXDATASIZE, MSG_DONTWAIT)) > 0)
  		{
  			recv_count++;
  			rcvd_file_size += rcvd_bytes;
- 			if(write(f, recv_str, rcvd_bytes) < 0)
+ 			if(write(f, recv_str, rcvd_bytes) < rcvd_bytes)
  			{
  				perror("error writing to file");
  				return	 -1;
@@ -99,6 +99,7 @@
     else/* open file successful */
  		{ 
  			printf("Sending file:  %s \n",file_name);
+
  			while( (read_bytes = read(f, send_buf, MAXDATASIZE)) >  0 )
  			{
  				if ( (sent_bytes = send(sock, send_buf, read_bytes,0)) < read_bytes )
@@ -143,6 +144,7 @@ int main(int argc, char *argv[]) {
 
     char s[INET6_ADDRSTRLEN];
     char command[MAXDATASIZE]; //To send to server
+    char recvFilePath[PATHSIZE];
     
 
     char* serverIp;
@@ -416,20 +418,21 @@ printf("client: connecting to %s\n", s);
                 		scanf("%s",pathstring);
 
 
-                				if( access( pathstring, F_OK ) != -1 ) {
+                		if( access( pathstring, F_OK ) != -1 ) {
     											// file exists
-			                			strncpy(pathstring,pathstring,strlen(pathstring));
+                			strncpy(pathstring,pathstring,strlen(pathstring));
 
-			                			pathstring[PATHSIZE-1]='\0';
+                			pathstring[PATHSIZE-1]='\0';
 
-			                			memset(command, '\0', MAXDATASIZE);
-			                			strcat(command, "2 ");
+                			memset(command, '\0', MAXDATASIZE);
+                			strcat(command, "2 ");
 
 			                                    strncat(command, username, USERNAMESIZE-1); //append username
 			                                    
 
 			                                    strncat(command, pathstring, PATHSIZE-1);
 			                                    printf("command sent: %s", command);
+
 
 			                                    if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
 			                                    	perror("send");
@@ -439,27 +442,27 @@ printf("client: connecting to %s\n", s);
 			                                    }
 
                         		} else {// file doesn't exist
-                                	printf("File doesn't exist \n");
-                                    option=0;
-                                }
+                        		printf("File doesn't exist \n");
+                        		option =0;
+                        	}
 
-                                
-                            }
+
+                        }
 
                                 //Search 
-                            if (option == 2) {
+                        if (option == 2) {
                                     //send option 3
 
-                            	printf("Enter key to search: ");
+                        	printf("Enter key to search: ");
 
 
-                            	char searchKey[PATHSIZE];
-                            	memset(searchKey,'\0',PATHSIZE);
+                        	char searchKey[PATHSIZE];
+                        	memset(searchKey,'\0',PATHSIZE);
 
-                            	scanf("%s",searchKey);
+                        	scanf("%s",searchKey);
 
-                            	memset(command, '\0', MAXDATASIZE);
-                            	strcat(command, "3 ");
+                        	memset(command, '\0', MAXDATASIZE);
+                        	strcat(command, "3 ");
 
                                     strncat(command, username, USERNAMESIZE-1); //append username
                                     
@@ -515,27 +518,34 @@ printf("client: connecting to %s\n", s);
                                 			continue;
                                 		}
 
-                                	int yes = 1;
-                                	if (setsockopt(peerSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
-                                		perror("setsockopt");
-                                		exit(1);
+                                		int yes = 1;
+                                		if (setsockopt(peerSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+                                			perror("setsockopt");
+                                			exit(1);
+                                		}
+
+                                		if (connect(peerSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
+                                			close(peerSocketFD);
+                                			perror("client: connect");
+                                			continue;
+                                		}
+                                		break;
                                 	}
 
-                                	if (connect(peerSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
-                                		close(peerSocketFD);
-                                		perror("client: connect");
-                                		continue;
+
+                                	if (p == NULL) {
+                                		fprintf(stderr, "client: failed to connect to peer\n");
+                                		return 2;
                                 	}
-                                	break;
-                                }
 
 
-                                if (p == NULL) {
-                                	fprintf(stderr, "client: failed to connect to peer\n");
-                                	return 2;
-                                }
-                                inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
-                                printf("client: connecting to %s\n", s);
+                                	FD_SET(peerSocketFD, &master); // add to master set
+                       				if (peerSocketFD > fdmax) { // keep track of the max
+                         			   fdmax = peerSocketFD;
+                        			}
+
+                                	inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
+                                	printf("client: connecting to %s\n", s);
 
 												        freeaddrinfo(peerinfo); // all done with this structure
 
@@ -548,27 +558,31 @@ printf("client: connecting to %s\n", s);
 
 												        printf("received: %s \n", buf);
 
-												        char pathstring[PATHSIZE];
-												        scanf("%s", pathstring);				                                	
+												        memset(recvFilePath,'\0',PATHSIZE);
+												        scanf("%s", recvFilePath);	
+
+												        memset(command, '\0', MAXDATASIZE);
+												    	sprintf(command,"%d %s",7,recvFilePath);	//option 7 for requesting file   
+
+												    	printf("command sent: %s \n", command);                             	
 
 
 
-												        if (send(peerSocketFD, pathstring, PATHSIZE - 1, 0) == -1) {
-												        	perror("send filename");
-												        	close(peerSocketFD);
-												        	exit(0);
-												        }
+												    	if (send(peerSocketFD, command, MAXDATASIZE, 0) == -1) {
+												    		perror("send filename");
+												    		close(peerSocketFD);
+												    		exit(0);
 
 
-												        //receive file
-												        	recv_file(i,pathstring);
+												    	}
 
-												        option=0;
+												    	option=8;
+
 
 												    }
 
                                 //quit
-								if (option == 4) {
+												    if (option == 4) {
 
                                     //send option 4  
 												    	memset(command, '\0', MAXDATASIZE);
@@ -595,126 +609,162 @@ printf("client: connecting to %s\n", s);
                             else if(i==serverSocketFD) {
                             		 // handle data from server socket
 
-                            	if(option==1){
-
-		                            		if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
-		                            			if (nbytes == 0) {
-														                            // connection closed
-		                            				printf("peer: socket %d hung up\n", i);
-		                            			} else {
-		                            				perror("recv");
-		                            				}
-								                        close(i); // bye!
-								                        printf("%d is removed from master \n", i);
-								                        FD_CLR(i, &master); // remove from master set
-								                        close(listener);
-								                        exit(0);
-								                    }	
-								                    buf[numbytes] = '\0';
-								                    printf("received: %s ", buf);
-								                    option = 0;
-												}
-
-								if(option==2){
-		                                        int f; /* file handle for receiving file*/
-												ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
-		                                        int recv_count;/* count of recv() calls*/
-		                                        char recv_str[MAXDATASIZE]; /* buffer to hold received data */   
+                            	
 
 
-                            	 		 		/* attempt to create file to save received data. 0644 = rw-r--r-- */
-							                	if( (f = open(SEARCHRESULTS, O_WRONLY|O_CREAT,0644)) < 0)
-							                	{
-							                		perror("error creating file");
-							                		return -1;
-							                	}
-		                                        recv_count = 0; /* number of recv() calls required to receive the file */
-		                                        rcvd_file_size = 0; /* size of received file */
+                        //     	if ((nbytes = recv(serverSocketFD, buf, sizeof buf, 0)) <= 0) {
+				                    //    		 // got error or connection closed by client
+                        //     		if (nbytes == 0) {
+				                    //         // connection closed
+                        //     			printf("server quit: socket %d hung up\n", i);
+                        //     		} else {
+                        //     			perror("recv");
+                        //     		}
+				                    //     close(i); // bye!
+				                    //     printf("%d is removed from master \n", i);
+				                    //     FD_CLR(i, &master); // remove from master set
+				                    // } else {
 
 
-		                                        /* continue receiving until ? (data or close) */
+				                    	if(option==1){
 
-							                	while((rcvd_bytes = recv(serverSocketFD, recv_str, MAXDATASIZE, MSG_DONTWAIT))>0)
-							                	{                                  		 
+				                    		printf("received: %s \n", buf);
+				                    		
+				                    	}
 
-							                		rcvd_file_size += rcvd_bytes;				                                        	
-
-							                		if(write(f, recv_str, rcvd_bytes) < 0)
-							                		{ 
-							                			perror("error writing to file");
-							                			return -1;
-							                		}
-							                	}
+				                    	if(option==2){
+		                        //                 int f; /* file handle for receiving file*/
+				                    		// ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
+		                        //                 int recv_count;/* count of recv() calls*/
+		                        //                 char recv_str[MAXDATASIZE]; /* buffer to hold received data */   
 
 
+                          //   	 		 		/* attempt to create file to save received data. 0644 = rw-r--r-- */
+				                    		// if( (f = open(SEARCHRESULTS, O_WRONLY|O_CREAT,0644)) < 0)
+				                    		// {
+				                    		// 	perror("error creating file");
+				                    		// 	return -1;
+				                    		// }
+		                        //                 recv_count = 0; /* number of recv() calls required to receive the file */
+		                        //                 rcvd_file_size = 0;  
 
-		                                        close(f); /* close file*/
-												                	printf("Client Received: %d bytes in %d recv(s) \n", rcvd_file_size, recv_count);  
+
+		                        //                 /* continue receiving until ? (data or close) */
+
+				                    		// while((rcvd_bytes = recv(serverSocketFD, recv_str, MAXDATASIZE, 0))>0)
+				                    		// {                                  		 
+
+				                    		// 	recv_count++;
+				                    		// 	rcvd_file_size += rcvd_bytes;				                                        	
+
+				                    		// 	if(write(f, recv_str, rcvd_bytes) < 0)
+				                    		// 	{ 
+				                    		// 		perror("error writing to file");
+				                    		// 		return -1;
+				                    		// 	}
+				                    		// }
 
 
-												                	memset(cmd, '\0', MAXDATASIZE);
+
+		                        //                 close(f); /* close file*/
+				                    		// printf("Client Received: %d bytes in %d recv(s) \n", rcvd_file_size, recv_count);  
+
+									        recv_file(i,SEARCHRESULTS);
+				                    		memset(cmd, '\0', MAXDATASIZE);
 			                                    //write cat command to print searchResults file
 
-												                	printf("search results: \n");
-												                	strcat(cmd, "cat searchResults");
+				                    		printf("search results: \n");
+				                    		strcat(cmd, "cat searchResults");
 
 
-												                	int ret;
-												                	if ((ret = system(cmd)) == -1) {
-												                		perror("print search results");
-												                	}
+				                    		int ret;
+				                    		if ((ret = system(cmd)) == -1) {
+				                    			perror("print search results");
+				                    		}
 
-												                	option=0;
+				                    		
 
 
                                         } // end act on data from server on option 2
 
+                                        option=0;
 
 
+				                  //  } // end server sent data
 
-                            	 	} // END handle data from server
+                            	 } // END handle data from server
 
                                  else // Handle Data From Peer
                                  {
 
-                                 	char pathstring[PATHSIZE];
+		                        //          	printf("data from peer %d \n",i);
 
-                                 	if ((nbytes = recv(i, pathstring, sizeof buf, 0)) <= 0) {
-						                        // got error or connection closed by client
-                                 		if (nbytes == 0) {
-						                            // connection closed
-                                 			printf("server: socket %d hung up\n", i);
-                                 		} else {
-                                 			perror("recv");
-                                 		}
-						                        close(i); // bye!
-						                        printf("%d is removed from master \n", i);
-						                        FD_CLR(i, &master); // remove from master set
-						                    }
-						                    else{
+		                        //          	if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+								                  //       // got error or connection closed by client
+		                        //          		if (nbytes == 0) {
+										                //             // connection closed
+		                        //          			printf("peer: socket %d hung up\n", i);
+		                        //          		} else {
+		                        //          			perror("recv");
+		                        //          		}
+						                    //     close(i); // bye!
+						                    //     printf("%d is removed from master \n", i);
+						                    //     FD_CLR(i, &master); // remove from master set
+						                    // }else{
 
-						                    	if( access(pathstring, F_OK ) != -1 ) {
-    											// file exists
-						                    		send_file(i,pathstring);
+					                    	if(option==8){ // peer is sending file
+					                    		recv_file(i,recvFilePath);
 
-						                    	} else {
-    											// file doesn't exist
-						                    		if (send(i, "File Not Found", 14, 0) == -1) {
-						                    			perror("send");						                    			
-						                    			close(i);
-						                    			exit(0);
-						                    		}
+					                    	}
+					                    	else{ // peer is requesting a file
 
+					                    		int peerOption=0,nbytes=0;
 
-						                    	}
-						                    }
+					                    		char pathstring[PATHSIZE];
+
+                                                        if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                                                                // got error or connection closed by client
+                                                             if (nbytes == 0) {
+                                                                                // connection closed
+                                                                 printf("peer: socket %d hung up\n", i);
+                                                             } else {
+                                                                 perror("recv");
+                                                             }
+                                                            close(i); // bye!
+                                                            printf("%d is removed from master \n", i);
+                                                            FD_CLR(i, &master); // remove from master set
+                                                        }else{
+
+            					                    		sscanf(buf,"%d %s",&peerOption,pathstring);
+
+            					                    		if(peerOption==7){
+
+            					                    			if( access(pathstring, F_OK ) != -1 ) {
+            			    											// file exists
+            					                    				send_file(i,pathstring);
+
+            					                    			} else {
+            			    											// file doesn't exist
+            					                    				if (send(i, "File Not Found", 14, 0) == -1) {
+            					                    					perror("send");						                    			
+            					                    					close(i);
+            					                    					exit(0);
+            					                    				}
+
+					                    			            }
+					                    		             }
+					                    	            }
+					                    	    }
+
+					                    	option=0;       
+					                    //}
 
 
                                  }// end Handle Data From Peer
 
 
 
-                                } // END - isset
+                            } // END - isset
 
                     } // END looping through file descriptors
 
