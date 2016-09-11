@@ -210,18 +210,17 @@ int main(void) {
 
                         //receive options
                         memset(cmd, '\0', MAXDATASIZE);
-                        int option = buf[0] - '0';
+                        int option;// = buf[0] - '0';
 
 
-                        memset(username, ' ', USERNAMESIZE);
-                        strncpy(username, buf + 2,USERNAMESIZE-1);
-                        username[USERNAMESIZE-1]='\0';
+                        memset(username,' ', USERNAMESIZE);
+                        //strncpy(username, buf + 2,USERNAMESIZE-1);
+                        //username[USERNAMESIZE-1]='\0';
 
 
+                        sscanf(buf,"%d %s",&option,username);
 
-
-                        printf("server: option: %d , user: %s \n", option, username);
-
+                        
                         //join 
                         if (option == 1) {
 
@@ -229,21 +228,28 @@ int main(void) {
 
                             char addressBuffer[INET_ADDRSTRLEN];
 
+
                             memset(addressBuffer, ' ', INET_ADDRSTRLEN);
-                            strncpy(addressBuffer, buf+2+(USERNAMESIZE-2)+1,INET_ADDRSTRLEN);
+                            //strncpy(addressBuffer, buf+2+(USERNAMESIZE-2)+1,INET_ADDRSTRLEN);
                             //addressBuffer[INET_ADDRSTRLEN]='\0';
 
+                            sscanf(buf,"%d %s %s %s",&option,username,addressBuffer,socketstring);
+
+                            printf("server: option: %d , user: %s \n", option, username);
 
 
-                            snprintf(socketstring, 5, "%d", i);
-                            memset(cmd, '\0', MAXDATASIZE);
-                            strcat(cmd, "echo ");
-                            strcat(cmd, username);
-                            strcat(cmd, " ");
-                            strcat(cmd, addressBuffer);
-                            strcat(cmd, " ");
-                            strcat(cmd, socketstring);
-                            strcat(cmd, " >> clientlist");
+
+                            //snprintf(socketstring, 5, "%s", buf+2+());
+                            // memset(cmd, '\0', MAXDATASIZE);
+                            // strcat(cmd, "echo ");
+                            // strcat(cmd, username);
+                            // strcat(cmd, " ");
+                            // strcat(cmd, addressBuffer);
+                            // strcat(cmd, " ");
+                            // strcat(cmd, socketstring);
+                            // strcat(cmd, " >> clientlist");
+
+                            sprintf(cmd,"echo %s %s %s >> clientlist",username,addressBuffer,socketstring);
 
                             int ret;
                             if ((ret = system(cmd)) == -1) {
@@ -306,17 +312,18 @@ int main(void) {
                         memset(searchKey,'\0', PATHSIZE);
                         strncpy(searchKey, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
 
-                        printf("searchKey : %s",searchKey);
+                        //printf("searchKey : %s",searchKey);
 
                         puts(searchKey);                  
 
-                        
+                        memset(cmd,'\0',MAXDATASIZE);
 
                         //write awk command to search all files and store results in searchResults file
-                        memset(cmd, '\0', MAXDATASIZE); 
-                        strcat(cmd, "cat ./publishedFiles/* | awk /");
-                        strcat(cmd, searchKey);   
-                        strcat(cmd, "/ > searchResults");                            
+
+                        sprintf(cmd,"rm searchResults\ncd publishedFiles\n\
+ls | while IFS='' read -r filename || [[ -n \"$filename\" ]];do\nawk '/%s/ {print  FILENAME\" \"$0 }' $filename >> ../searchResults\ndone\n\
+cat ../clientlist | while read filename ip port || [[ -n \"$filename\" ]];\ndo\nsed -i \"s/$filename/$filename $ip $port/\" ../searchResults\ndone\n",searchKey);
+                        
                         
 
                         puts(cmd);                                   
@@ -338,12 +345,15 @@ int main(void) {
                     if (option == 4) {
 
                             //remove user from clientlist
-                        snprintf(socketstring, 5, "%d", i);
-                        memset(cmd, '\0', MAXDATASIZE);                            
-                        strcat(cmd, "sed -i \"/$1 $2/d\" clientlist ");
-                        strcat(cmd, username);                            
-                        strcat(cmd, " ");
-                        strcat(cmd, socketstring);            
+                         memset(cmd, '\0', MAXDATASIZE); 
+                        sprintf(cmd,"sed -i /%s/d clientlist",username);
+                        puts(cmd);
+                        // snprintf(socketstring, 5, "%d", i);
+                        // memset(cmd, '\0', MAXDATASIZE);                            
+                        // strcat(cmd, "sed -i \"/$1 $2/d\" clientlist ");
+                        // strcat(cmd, username);                            
+                        // strcat(cmd, " ");
+                        // strcat(cmd, socketstring);            
 
                         int ret;
                         if ((ret = system(cmd)) == -1) {
