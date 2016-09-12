@@ -350,7 +350,7 @@ cat ../clientlist | while read filename ip port || [[ -n \"$filename\" ]];\ndo\n
                     }
 
                         //quit
-                    if (option == 4) {
+                    if (option == 5) {
 
                             //remove user from clientlist
                          memset(cmd, '\0', MAXDATASIZE); 

@@ -113,8 +113,8 @@
 
 int main(int argc, char *argv[]) {
 
-            if (argc != 3) {
-                fprintf(stderr, "usage: p username servername \n");
+            if (argc != 2) {
+                fprintf(stderr, "usage: p username \n");
                 exit(1);
             }
 
@@ -191,139 +191,18 @@ int main(int argc, char *argv[]) {
         exit(3);
     }               
 
-
-
-
-
-        // setup connection on SPORT with server 
-    memset(&hints, 0, sizeof hints);
-    hints.ai_family = AF_UNSPEC;
-    hints.ai_socktype = SOCK_STREAM;
-    if ((rv = getaddrinfo(argv[2], SPORT, &hints, &servinfo)) != 0) {
-        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-        return 1;
-    }
-
-
-        // loop through all the results and connect to the first we can
-    for (p = servinfo; p != NULL; p = p->ai_next) {
-        if ((serverSocketFD = socket(p->ai_family, p->ai_socktype,
-            p->ai_protocol)) == -1) {
-            perror("client: socket");
-        continue;
-    }
-
-    int yes = 1;
-    if (setsockopt(serverSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
-        perror("setsockopt");
-        exit(1);
-    }
-
-    if (connect(serverSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
-        close(serverSocketFD);
-        perror("client: connect");
-        continue;
-    }
-    break;
-}
-
-
-if (p == NULL) {
-    fprintf(stderr, "client: failed to connect\n");
-    return 2;
-}
-inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
-printf("client: connecting to %s\n", s);
-
-        freeaddrinfo(servinfo); // all done with this structure
-
-        if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
-            perror("recv");
-            close(serverSocketFD);
-            exit(1);
-        }
-        buf[numbytes] = '\0';
-
-        printf("received: %s \n", buf);
-
-
-
-
-        //get local address 
-
-        struct ifaddrs * ifAddrStruct=NULL;
-        struct ifaddrs * ifa=NULL;
-        void * tmpAddrPtr=NULL;
-        char addressBuffer[INET_ADDRSTRLEN];
-
-        getifaddrs(&ifAddrStruct);
-
-        for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
-            if (!ifa->ifa_addr) {
-                continue;
-            }
-            if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
-                // is a valid IP4 Address
-                tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
-
-                inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-              
-                if(!strcmp(ifa->ifa_name,"ens33")||!strcmp(ifa->ifa_name,"eth0")){
-
-                    printf("%s IP Address %s \n", ifa->ifa_name, addressBuffer); 
-                }
-            } 
-            // else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
-            //     // is a valid IP6 Address
-            //     tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
-            //     char addressBuffer[INET6_ADDRSTRLEN];
-            //     inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
-            //     printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
-            // }
-        }
-        if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
-
-
-         //join - send option 1
-        memset(username, ' ', USERNAMESIZE);
-        strncpy(username,argv[1],strlen(argv[1]));
-        username[USERNAMESIZE-1]='\0';
-
-        memset(command,'\0',MAXDATASIZE);
-
-        sprintf(command,"%d %s %s %s",1,username,addressBuffer,PORT);
-        //strcat(command, "1 ");
-        //strncat(command, username, USERNAMESIZE-1); //append username
-
-        //strncat(command, addressBuffer, INET_ADDRSTRLEN); //append IP address
-        
-        if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
-            perror("send");
-            close(serverSocketFD);
-            exit(0);
-        }
-
-        if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
-            perror("recv");
-            close(serverSocketFD);
-            exit(1);
-        }
-        buf[numbytes] = '\0';
-        printf("received: %s ", buf);
-
+   
         option = 0;
 
 
         // add the listener to the master set
         FD_SET(listener, &master);
-        FD_SET(serverSocketFD, &master);
+       
         FD_SET(STDIN_FILENO,&master);
 
-        // keep track of the biggest file descriptor
-        if(listener>serverSocketFD)
-            fdmax = listener;
-        else
-        fdmax = serverSocketFD; // so far, it's this one
+        fdmax= listener;
+
+       
 
 
 // main loop
@@ -332,7 +211,7 @@ printf("client: connecting to %s\n", s);
         printf("active sockets: %d %d %d , option: %d",serverSocketFD, listener, STDIN_FILENO, option);
 
         if (option == 0) {        
-            printf("\n----MENU---- \n Enter a Number From following \n 1. Publish \n 2. Search  \n 3. Fetch \n 4. Quit \n ");            
+            printf("\n----MENU---- \n Enter a Number From following \n 1. Join \n 2. Publish \n 3. Search  \n 4. Fetch \n 5. Quit \n ");            
         }
 
         read_fds = master; // copy it
@@ -399,9 +278,148 @@ printf("client: connecting to %s\n", s);
 
 
 
-                        //recv file name and send file
+                     
 
-                    if (option == 1) {
+                    if(option == 1){ // join
+
+                                          printf("\nEnter server ip: ");
+
+                                            char serverIP[PATHSIZE];
+                                            memset(serverIP,'\0',PATHSIZE);
+
+
+                                            scanf("%s",serverIP);
+
+                                           // setup connection on SPORT with server 
+                                            memset(&hints, 0, sizeof hints);
+                                            hints.ai_family = AF_UNSPEC;
+                                            hints.ai_socktype = SOCK_STREAM;
+                                            if ((rv = getaddrinfo(serverIP, SPORT, &hints, &servinfo)) != 0) {
+                                                fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+                                                return 1;
+                                            }
+
+
+                                                // loop through all the results and connect to the first we can
+                                            for (p = servinfo; p != NULL; p = p->ai_next) {
+                                                if ((serverSocketFD = socket(p->ai_family, p->ai_socktype,
+                                                    p->ai_protocol)) == -1) {
+                                                    perror("client: socket");
+                                                continue;
+                                                 }
+
+                                                int yes = 1;
+                                                if (setsockopt(serverSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+                                                    perror("setsockopt");
+                                                    exit(1);
+                                                }
+
+                                                if (connect(serverSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
+                                                    close(serverSocketFD);
+                                                    perror("client: connect");
+                                                    continue;
+                                                }
+                                                 break;
+                                            }
+
+
+                                        if (p == NULL) {
+                                            fprintf(stderr, "client: failed to connect\n");
+                                            return 2;
+                                        }
+                                        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
+                                        printf("client: connecting to %s\n", s);
+
+                                                freeaddrinfo(servinfo); // all done with this structure
+
+                                                if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
+                                                    perror("recv");
+                                                    close(serverSocketFD);
+                                                    exit(1);
+                                                }
+                                                buf[numbytes] = '\0';
+
+                                                printf("received: %s \n", buf);
+
+
+
+
+                                                //get local address 
+
+                                                struct ifaddrs * ifAddrStruct=NULL;
+                                                struct ifaddrs * ifa=NULL;
+                                                void * tmpAddrPtr=NULL;
+                                                char addressBuffer[INET_ADDRSTRLEN];
+
+                                                getifaddrs(&ifAddrStruct);
+
+                                                for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+                                                    if (!ifa->ifa_addr) {
+                                                        continue;
+                                                    }
+                                                    if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
+                                                        // is a valid IP4 Address
+                                                        tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+
+                                                        inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+                                                      
+                                                        if(!strcmp(ifa->ifa_name,"ens33")||!strcmp(ifa->ifa_name,"eth0")){
+
+                                                            printf("%s IP Address %s \n", ifa->ifa_name, addressBuffer); 
+                                                        }
+                                                    } 
+                                                    // else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
+                                                    //     // is a valid IP6 Address
+                                                    //     tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+                                                    //     char addressBuffer[INET6_ADDRSTRLEN];
+                                                    //     inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+                                                    //     printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
+                                                    // }
+                                                }
+                                                if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+
+
+                                                 //join - send option 1
+                                                memset(username, ' ', USERNAMESIZE);
+                                                strncpy(username,argv[1],strlen(argv[1]));
+                                                username[USERNAMESIZE-1]='\0';
+
+                                                memset(command,'\0',MAXDATASIZE);
+
+                                                sprintf(command,"%d %s %s %s",1,username,addressBuffer,PORT);
+                                                //strcat(command, "1 ");
+                                                //strncat(command, username, USERNAMESIZE-1); //append username
+
+                                                //strncat(command, addressBuffer, INET_ADDRSTRLEN); //append IP address
+                                                
+                                                if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
+                                                    perror("send");
+                                                    close(serverSocketFD);
+                                                    exit(0);
+                                                }
+
+                                                if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
+                                                    perror("recv");
+                                                    close(serverSocketFD);
+                                                    exit(1);
+                                                }
+                                                buf[numbytes] = '\0';
+                                                printf("received: %s ", buf);
+
+                                                 FD_SET(serverSocketFD, &master);
+
+                                                  // keep track of the biggest file descriptor
+                                                    if(serverSocketFD>fdmax)
+                                                        fdmax = serverSocketFD;
+                                                    else
+                                                    fdmax = serverSocketFD; // so far, it's this one
+                                                option=0;
+
+
+
+                    }
+
+                    if (option == 2) {
                                                 //send option 2 
                         printf("Enter path of file to publish: ");
 
@@ -444,7 +462,7 @@ printf("client: connecting to %s\n", s);
                         }
 
                                 //Search 
-                        if (option == 2) {
+                        if (option == 3) {
                                     //send option 3
 
                             printf("Enter key to search: ");
@@ -475,7 +493,7 @@ printf("client: connecting to %s\n", s);
 
 
                                 }
-                                else if(option == 3){
+                                else if(option == 4){
 
                                  //connect to peer and fetch file
 
@@ -576,11 +594,11 @@ printf("client: connecting to %s\n", s);
                                                     }
 
                                 //quit
-                            if (option == 4) {
+                            if (option == 5) {
 
-                                    //send option 4  
+                                    //send option 5  
                                     memset(command, '\0', MAXDATASIZE);
-                                    strcat(command, "4 ");
+                                    strcat(command, "5 ");
                                     strcat(command, argv[1]); //append username
 
                                     if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
@@ -656,6 +674,28 @@ printf("client: connecting to %s\n", s);
 
                                         } // end act on data from server on option 2
 
+                                        else{ // handle server exit
+
+                                              if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                                                                // got error or connection closed by client
+                                                             if (nbytes == 0) {
+                                                                                // connection closed
+                                                                 printf("peer: socket %d hung up\n", i);
+                                                             } else {
+                                                                 perror("recv");
+                                                             }
+                                                            close(i); // bye!
+                                                            printf("%d is removed from master \n connection lost with server \n", i);
+                                                            FD_CLR(i, &master); // remove from master set
+                                                        }else{
+
+                                                                printf("received: %s \n", buf);
+
+                                                            }
+
+
+                                        }
+
                                         option=0;
 
 
@@ -668,9 +708,14 @@ printf("client: connecting to %s\n", s);
 
                                             if(option==8){ // peer is sending file
                                                 if(!fork()){ // recv file with child process
+                                                   for(int j=0;j<fdmax;j++){
+                                                      if(j!=i) close(j);
+                                                    }
                                                   recv_file(i,recvFilePath,0);
+                                                  close(i);
                                                   exit(0);
                                                 }
+                                                close(i);
 
                                                 FD_CLR(i,&master);
 
@@ -701,9 +746,14 @@ printf("client: connecting to %s\n", s);
                                                                 if( access(pathstring, F_OK ) != -1 ) {
                                                                         // file exists
                                                                     if(!fork()){ // send file with a child process
+                                                                       for(int j=0;j<fdmax;j++){
+                                                                        if(j!=i) close(j);
+                                                                       }
                                                                        send_file(i,pathstring);
+                                                                       close(i);
                                                                        exit(0);
                                                                     }
+                                                                    close(i);
                                                                     FD_CLR(i,&master);
 
                                                                 } else {
