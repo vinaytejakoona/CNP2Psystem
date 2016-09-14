@@ -34,12 +34,12 @@
 
     }
     return &(((struct sockaddr_in6*) sa)->sin6_addr);
- }
+}
 
 
- int  recv_file(int sock, char * file_name,int options)
- {
-    
+int  recv_file(int sock, char * file_name,int options)
+{
+
     int f; /* file handle for receiving file*/
     ssize_t sent_bytes, rcvd_bytes, rcvd_file_size;
     int recv_count; /* count of recv() calls*/
@@ -111,10 +111,11 @@
 
 
 
-int main(int argc, char *argv[]) {
+ int main(int argc, char *argv[]) {
 
-            if (argc != 2) {
-                fprintf(stderr, "usage: p username \n");
+        
+            if (argc != 4) {
+                fprintf(stderr, "usage: p username serverip serverport \n");
                 exit(1);
             }
 
@@ -124,6 +125,7 @@ int main(int argc, char *argv[]) {
     int fdmax; // maximum file descriptor number
     int listener; // listening socket descriptor
     int newfd; // newly accept()ed socket descriptor
+    
     struct sockaddr_storage remoteaddr; // client address
     socklen_t addrlen;
 
@@ -156,6 +158,8 @@ int main(int argc, char *argv[]) {
     hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_flags = AI_PASSIVE;
+
+    sprintf(username,"%s",argv[1]);
 
 
     //setup listening socket on PORT to let other peers connect
@@ -191,28 +195,137 @@ int main(int argc, char *argv[]) {
         exit(3);
     }               
 
-   
-        option = 0;
+
+       // setup connection on SPORT with server 
+    memset(&hints, 0, sizeof hints);
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_STREAM;
+    if ((rv = getaddrinfo(argv[2], argv[3], &hints, &servinfo)) != 0) {
+        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+        return 1;
+    }
 
 
-        // add the listener to the master set
+        // loop through all the results and connect to the first we can
+    for (p = servinfo; p != NULL; p = p->ai_next) {
+        if ((serverSocketFD = socket(p->ai_family, p->ai_socktype,
+            p->ai_protocol)) == -1) {
+            perror("client: socket");
+        continue;
+    }
+
+    int yes = 1;
+    if (setsockopt(serverSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+        perror("setsockopt");
+        exit(1);
+    }
+
+    if (connect(serverSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
+        close(serverSocketFD);
+        perror("client: connect");
+        continue;
+    }
+    break;
+}
+
+
+if (p == NULL) {
+    fprintf(stderr, "client: failed to connect\n");
+    return 2;
+}
+inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
+printf("client: connecting to %s\n", s);
+
+        freeaddrinfo(servinfo); // all done with this structure
+
+        if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
+            perror("recv");
+            close(serverSocketFD);
+            exit(1);
+        }
+        buf[numbytes] = '\0';
+
+        printf("received: %s \n", buf);
+
+
+
+
+        //get local address 
+
+        struct ifaddrs * ifAddrStruct=NULL;
+        struct ifaddrs * ifa=NULL;
+        void * tmpAddrPtr=NULL;
+        char addressBuffer[INET_ADDRSTRLEN];
+
+        getifaddrs(&ifAddrStruct);
+
+        for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr) {
+                continue;
+            }
+            if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
+                // is a valid IP4 Address
+                tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+
+                inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+
+                if(!strcmp(ifa->ifa_name,"ens33")||!strcmp(ifa->ifa_name,"eth0")){
+
+                    printf("%s IP Address %s \n", ifa->ifa_name, addressBuffer); 
+                }
+            } 
+            // else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
+            //     // is a valid IP6 Address
+            //     tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+            //     char addressBuffer[INET6_ADDRSTRLEN];
+            //     inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+            //     printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
+            // }
+        }
+        if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+
+
+         //join - send option 1
+       
+        memset(command,'\0',MAXDATASIZE);
+
+        sprintf(command,"%d %s %s %s",1,username,addressBuffer,PORT);
+        
+        if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
+            perror("send");
+            close(serverSocketFD);
+            exit(0);
+        }
+
+        if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
+            perror("recv");
+            close(serverSocketFD);
+            exit(1);
+        }
+        buf[numbytes] = '\0';
+        printf("received: %s ", buf);
+
         FD_SET(listener, &master);
-       
+
         FD_SET(STDIN_FILENO,&master);
+        FD_SET(serverSocketFD, &master);
 
-        fdmax= listener;
-
-       
+          // keep track of the biggest file descriptor
+        fdmax=listener;
+        if(serverSocketFD>fdmax)
+            fdmax = serverSocketFD;
+        
+        option=0;
 
 
 // main loop
-    for (;;) {
+        for (;;) {
 
-        printf("active sockets: %d %d %d , option: %d",serverSocketFD, listener, STDIN_FILENO, option);
+            printf("before select: active sockets: %d %d %d , option: %d \n",serverSocketFD, listener, STDIN_FILENO, option);
 
-        if (option == 0) {        
-            printf("\n----MENU---- \n Enter a Number From following \n 1. Join \n 2. Publish \n 3. Search  \n 4. Fetch \n 5. Quit \n ");            
-        }
+            if (option == 0) {        
+                printf("\n----MENU---- \n Enter a Command \n 1. Publish [1 filename] \n 2. Search [2 searchkey]  \n 3. Fetch [3 peerip peerport filename] \n 4. Quit \n ");            
+            }
 
         read_fds = master; // copy it
         //write_fds = master;
@@ -220,6 +333,8 @@ int main(int argc, char *argv[]) {
             perror("select");
             exit(4);
         }
+
+        printf("after select: active sockets: %d %d %d , option: %d \n",serverSocketFD, listener, STDIN_FILENO, option);
 
 
 
@@ -250,8 +365,6 @@ int main(int argc, char *argv[]) {
                             newfd);
 
 
-                        //act on sockets to write to 
-
                         if (send(newfd, "Hi \n Enter File Name :", 22, 0) == -1) {
                             perror("send");
                             close(serverSocketFD);
@@ -259,11 +372,7 @@ int main(int argc, char *argv[]) {
                             exit(0);
                         }
 
-                        //recv file name and send file to the peer
-
-
-
-
+                       
 
                     }
                 }
@@ -272,307 +381,153 @@ int main(int argc, char *argv[]) {
                     // read data from keyboard
 
 
-                    memset(cmd,' ',MAXDATASIZE);
+                    memset(cmd,'\0',MAXDATASIZE);
                     fgets(cmd, MAXDATASIZE, stdin);
-                    sscanf(cmd,"%d",&option);
+                    
+                    char pathstring[PATHSIZE];
+                    memset(pathstring,'\0',PATHSIZE);
+
+                    sscanf(cmd,"%d %s",&option,pathstring);        
+
+                    if(option!=1&&option!=2&&option!=3&&option!=4){
+                        printf("incorrect usage, try again  %d\n",option);
+                         option =0;
+                    }             
+
+                    
+
+                    if (option == 1) {
+
+                                 // check if file exists
+                                if( access( pathstring, F_OK ) != -1 ) {                                       
+
+                                    if(strlen(pathstring)==0){
+                                        printf("incorrect usage, try again \n");
+                                        option =0;
+
+                                    }
+                                    else{                         
+
+                                       memset(command, '\0', MAXDATASIZE);
+
+                                       sprintf(command,"%d %s %s",2,username,pathstring);                      
+                                       printf("command sent: %s \n", command);
 
 
+                                       if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
+                                        perror("send");                                   
 
-                     
-
-                    if(option == 1){ // join
-
-                                          printf("\nEnter server ip: ");
-
-                                            char serverIP[PATHSIZE];
-                                            memset(serverIP,'\0',PATHSIZE);
-
-
-                                            scanf("%s",serverIP);
-
-                                           // setup connection on SPORT with server 
-                                            memset(&hints, 0, sizeof hints);
-                                            hints.ai_family = AF_UNSPEC;
-                                            hints.ai_socktype = SOCK_STREAM;
-                                            if ((rv = getaddrinfo(serverIP, SPORT, &hints, &servinfo)) != 0) {
-                                                fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-                                                return 1;
-                                            }
-
-
-                                                // loop through all the results and connect to the first we can
-                                            for (p = servinfo; p != NULL; p = p->ai_next) {
-                                                if ((serverSocketFD = socket(p->ai_family, p->ai_socktype,
-                                                    p->ai_protocol)) == -1) {
-                                                    perror("client: socket");
-                                                continue;
-                                                 }
-
-                                                int yes = 1;
-                                                if (setsockopt(serverSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
-                                                    perror("setsockopt");
-                                                    exit(1);
-                                                }
-
-                                                if (connect(serverSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
-                                                    close(serverSocketFD);
-                                                    perror("client: connect");
-                                                    continue;
-                                                }
-                                                 break;
-                                            }
-
-
-                                        if (p == NULL) {
-                                            fprintf(stderr, "client: failed to connect\n");
-                                            return 2;
                                         }
-                                        inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
-                                        printf("client: connecting to %s\n", s);
-
-                                                freeaddrinfo(servinfo); // all done with this structure
-
-                                                if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
-                                                    perror("recv");
-                                                    close(serverSocketFD);
-                                                    exit(1);
-                                                }
-                                                buf[numbytes] = '\0';
-
-                                                printf("received: %s \n", buf);
-
-
-
-
-                                                //get local address 
-
-                                                struct ifaddrs * ifAddrStruct=NULL;
-                                                struct ifaddrs * ifa=NULL;
-                                                void * tmpAddrPtr=NULL;
-                                                char addressBuffer[INET_ADDRSTRLEN];
-
-                                                getifaddrs(&ifAddrStruct);
-
-                                                for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
-                                                    if (!ifa->ifa_addr) {
-                                                        continue;
-                                                    }
-                                                    if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
-                                                        // is a valid IP4 Address
-                                                        tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
-
-                                                        inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
-                                                      
-                                                        if(!strcmp(ifa->ifa_name,"ens33")||!strcmp(ifa->ifa_name,"eth0")){
-
-                                                            printf("%s IP Address %s \n", ifa->ifa_name, addressBuffer); 
-                                                        }
-                                                    } 
-                                                    // else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
-                                                    //     // is a valid IP6 Address
-                                                    //     tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
-                                                    //     char addressBuffer[INET6_ADDRSTRLEN];
-                                                    //     inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
-                                                    //     printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
-                                                    // }
-                                                }
-                                                if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
-
-
-                                                 //join - send option 1
-                                                memset(username, ' ', USERNAMESIZE);
-                                                strncpy(username,argv[1],strlen(argv[1]));
-                                                username[USERNAMESIZE-1]='\0';
-
-                                                memset(command,'\0',MAXDATASIZE);
-
-                                                sprintf(command,"%d %s %s %s",1,username,addressBuffer,PORT);
-                                                //strcat(command, "1 ");
-                                                //strncat(command, username, USERNAMESIZE-1); //append username
-
-                                                //strncat(command, addressBuffer, INET_ADDRSTRLEN); //append IP address
-                                                
-                                                if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
-                                                    perror("send");
-                                                    close(serverSocketFD);
-                                                    exit(0);
-                                                }
-
-                                                if ((numbytes = recv(serverSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
-                                                    perror("recv");
-                                                    close(serverSocketFD);
-                                                    exit(1);
-                                                }
-                                                buf[numbytes] = '\0';
-                                                printf("received: %s ", buf);
-
-                                                 FD_SET(serverSocketFD, &master);
-
-                                                  // keep track of the biggest file descriptor
-                                                    if(serverSocketFD>fdmax)
-                                                        fdmax = serverSocketFD;
-                                                    else
-                                                    fdmax = serverSocketFD; // so far, it's this one
-                                                option=0;
-
-
-
-                    }
-
-                    if (option == 2) {
-                                                //send option 2 
-                        printf("Enter path of file to publish: ");
-
-                        char pathstring[PATHSIZE];
-                        memset(pathstring,' ',PATHSIZE);
-
-
-                        scanf("%s",pathstring);
-
-
-                        if( access( pathstring, F_OK ) != -1 ) {
-                                                // file exists
-                            strncpy(pathstring,pathstring,strlen(pathstring));
-
-                            pathstring[PATHSIZE-1]='\0';
-
-                            memset(command, '\0', MAXDATASIZE);
-                            strcat(command, "2 ");
-
-                                                strncat(command, username, USERNAMESIZE-1); //append username
-                                                
-
-                                                strncat(command, pathstring, PATHSIZE-1);
-                                                printf("command sent: %s", command);
-
-
-                                                if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
-                                                    perror("send");
-                                                    close(serverSocketFD);
-                                                    close(listener);
-                                                    exit(0);
-                                                }
-
-                                } else {// file doesn't exist
-                                printf("File doesn't exist \n");
-                                option =0;
-                                }
-
-
-                        }
-
-                                //Search 
-                        if (option == 3) {
-                                    //send option 3
-
-                            printf("Enter key to search: ");
-
-
-                            char searchKey[PATHSIZE];
-                            memset(searchKey,'\0',PATHSIZE);
-
-                            scanf("%s",searchKey);
-
-                            memset(command, '\0', MAXDATASIZE);
-                            strcat(command, "3 ");
-
-                                    strncat(command, username, USERNAMESIZE-1); //append username
-                                    
-
-                                    strcat(command, searchKey);
-
-                                    printf("command sent: %s \n", command);                             
-
-
-                                    if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
-                                        perror("send");
-                                        close(serverSocketFD);
-                                        close(listener);
-                                        exit(0);
                                     }
 
-
                                 }
-                                else if(option == 4){
+                            else {// file doesn't exist
+                                    printf("File doesn't exist \n");
+                                    option =0;
+                            }
+                            
+
+
+                    }                   
+                    else if (option == 2) { //Search                                                                 
+
+                                    if(strlen(pathstring)==0){
+                                        printf("incorrect usage, try again \n");
+                                        option =0;
+
+                                    }
+                                    else{
+
+                                          
+
+                                            memset(command, '\0', MAXDATASIZE);                                        
+                                            sprintf(command,"%d %s",3,pathstring);
+                                            printf("command sent: %s \n", command);                          
+
+
+                                            if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
+                                                perror("send");                                                
+                                                
+                                            }
+                                        
+
+                                    }
+
+                    }
+                    else if(option == 3){
 
                                  //connect to peer and fetch file
-
-
 
                                     char addressBuffer[INET_ADDRSTRLEN];
                                     char peerPort[10];
 
-                                    printf("Enter IP Address of Peer: ");
 
-                                    scanf("%s",addressBuffer);
+                                     memset(recvFilePath,'\0',PATHSIZE);
+                                     memset(addressBuffer,'\0',INET_ADDRSTRLEN);
+                                     memset(peerPort,'\0',10);
 
-                                    printf("Enter PORT of Peer: ");
+                                    sscanf(cmd,"%d %s %s %s",&option,addressBuffer,peerPort,recvFilePath);   
 
-                                    scanf("%s",peerPort);
+                                    if(strlen(pathstring)==0||strlen(addressBuffer)==0||strlen(peerPort)==0||strlen(recvFilePath)==0){
+                                        printf("incorrect usage, try again \n");
+                                        option =0;
 
-                                    struct addrinfo hints,*ai, *peerinfo, *p;
-                                    int peerSocketFD;
-
-
-                                    memset(&hints, 0, sizeof hints);
-                                    hints.ai_family = AF_UNSPEC;
-                                    hints.ai_socktype = SOCK_STREAM;
-                                    if ((rv = getaddrinfo(addressBuffer, peerPort, &hints, &peerinfo)) != 0) {
-                                        fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
-                                        return 1;
                                     }
+                                    else{                                    
+                                                       
+
+                                                        struct addrinfo hints,*ai, *peerinfo, *p;
+                                                        int peerSocketFD;
 
 
-                                                        // loop through all the results and connect to the first we can
-                                    for (p = peerinfo; p != NULL; p = p->ai_next) {
-                                        if ((peerSocketFD = socket(p->ai_family, p->ai_socktype,p->ai_protocol)) == -1) {
-                                            perror("client: socket");
-                                            continue;
-                                        }
-
-                                        int yes = 1;
-                                        if (setsockopt(peerSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
-                                            perror("setsockopt");
-                                            exit(1);
-                                        }
-
-                                        if (connect(peerSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
-                                            close(peerSocketFD);
-                                            perror("client: connect");
-                                            continue;
-                                        }
-                                        break;
-                                    }
+                                                        memset(&hints, 0, sizeof hints);
+                                                        hints.ai_family = AF_UNSPEC;
+                                                        hints.ai_socktype = SOCK_STREAM;
+                                                        if ((rv = getaddrinfo(addressBuffer, peerPort, &hints, &peerinfo)) != 0) {
+                                                            fprintf(stderr, "getaddrinfo: %s\n", gai_strerror(rv));
+                                                            return 1;
+                                                        }
 
 
-                                    if (p == NULL) {
-                                        fprintf(stderr, "client: failed to connect to peer\n");
-                                        return 2;
-                                    }
+                                                                            // loop through all the results and connect to the first we can
+                                                        for (p = peerinfo; p != NULL; p = p->ai_next) {
+                                                            if ((peerSocketFD = socket(p->ai_family, p->ai_socktype,p->ai_protocol)) == -1) {
+                                                                perror("client: socket");
+                                                                continue;
+                                                            }
+
+                                                            int yes = 1;
+                                                            if (setsockopt(peerSocketFD, SOL_SOCKET, SO_REUSEADDR, &yes, sizeof yes) == -1) {
+                                                                perror("setsockopt");
+                                                                
+                                                            }
+
+                                                            if (connect(peerSocketFD, p->ai_addr, p->ai_addrlen) == -1) {
+                                                                close(peerSocketFD);
+                                                                perror("client: connect");
+                                                                continue;
+                                                            }
+                                                            break;
+                                                        }
 
 
-                                    FD_SET(peerSocketFD, &master); // add to master set
-                                    if (peerSocketFD > fdmax) { // keep track of the max
-                                       fdmax = peerSocketFD;
-                                    }
+                                                        if (p == NULL) {
+                                                            fprintf(stderr, "client: failed to connect to peer\n");
+                                                            return 2;
+                                                        }
 
-                                    inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
-                                    printf("client: connecting to %s\n", s);
+
+                                                        FD_SET(peerSocketFD, &master); // add to master set
+                                                        if (peerSocketFD > fdmax) { // keep track of the max
+                                                         fdmax = peerSocketFD;
+                                                     }
+
+                                                     inet_ntop(p->ai_family, get_in_addr((struct sockaddr *) p->ai_addr),s, sizeof s);
+                                                     printf("client: connecting to %s\n", s);
 
                                                         freeaddrinfo(peerinfo); // all done with this structure
 
-                                                        if ((numbytes = recv(peerSocketFD, buf, MAXDATASIZE - 1, 0)) == -1) {
-                                                            perror("recv");
-                                                            close(peerSocketFD);
-                                                            exit(1);
-                                                        }
-                                                        buf[numbytes] = '\0';
-
-                                                        printf("received: %s \n", buf);
-
-                                                        memset(recvFilePath,'\0',PATHSIZE);
-                                                        scanf("%s", recvFilePath);  
-
+                                                                                                            
                                                         memset(command, '\0', MAXDATASIZE);
                                                         sprintf(command,"%d %s",7,recvFilePath);    //option 7 for requesting file   
 
@@ -582,8 +537,7 @@ int main(int argc, char *argv[]) {
 
                                                         if (send(peerSocketFD, command, MAXDATASIZE, 0) == -1) {
                                                             perror("send filename");
-                                                            close(peerSocketFD);
-                                                            exit(0);
+                                                            close(peerSocketFD);                                                     
 
 
                                                         }
@@ -591,28 +545,28 @@ int main(int argc, char *argv[]) {
                                                         option=8;
 
 
-                                                    }
+                                            }                                         
+
+                                        }
 
                                 //quit
-                            if (option == 5) {
+                                    else if (option == 4) {
 
-                                    //send option 5  
-                                    memset(command, '\0', MAXDATASIZE);
-                                    strcat(command, "5 ");
-                                    strcat(command, argv[1]); //append username
+                                
+                                                    memset(command, '\0', MAXDATASIZE);
+                                                
+                                                    sprintf(command,"%d %s",5,argv[1]);
 
-                                    if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
-                                        perror("send");
-                                        close(serverSocketFD);
-                                        close(listener);
-                                        exit(0);
-                                    }
+                                                    if (send(serverSocketFD, command, MAXDATASIZE - 1, 0) == -1) {
+                                                        perror("send");
+                                                        close(serverSocketFD);
+                                                        close(listener);
+                                                        exit(0);
+                                                     }
 
-                                    close(listener);
-                                    close(serverSocketFD);
-                                    exit(0);
-
-
+                                                    close(listener);
+                                                    close(serverSocketFD);
+                                                    exit(0);
                                     
                                 }      
 
@@ -622,84 +576,92 @@ int main(int argc, char *argv[]) {
                                      // handle data from server socket
 
 
-                                        if(option==1){ // recv 
+                                        if(option==1){ // receive message after publish success
 
-                                             if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                                                       if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
                                                                 // got error or connection closed by client
-                                                             if (nbytes == 0) {
-                                                                                // connection closed
-                                                                 printf("peer: socket %d hung up\n", i);
-                                                             } else {
-                                                                 perror("recv");
-                                                             }
-                                                            close(i); // bye!
-                                                            printf("%d is removed from master \n", i);
-                                                            FD_CLR(i, &master); // remove from master set
+                                                               if (nbytes == 0) {
+                                                                                                // connection closed
+                                                                   printf("peer: socket %d hung up\n", i);
+                                                               } else {
+                                                                   perror("recv");
+                                                               }
+                                                                close(i); // bye!
+                                                                printf("%d is removed from master \n", i);
+                                                                FD_CLR(i, &master); // remove from master set
                                                         }else{
 
-                                                                printf("received: %s \n", buf);
+                                                            printf("received: %s \n", buf);
 
-                                                            }
-                                            
-                                        } 
+                                                        }
 
-                                        if(option==2){
 
-                                            memset(cmd, '\0', MAXDATASIZE);
+                                                    } 
 
-                                            strcat(cmd, "rm searchResults");
+                                        else if(option==2){ // recv search results
 
-                                            int ret;
-                                            if ((ret = system(cmd)) == -1) {
-                                                perror("print search results");
-                                            }
-             
-                                            
-                                               recv_file(i,SEARCHRESULTS,MSG_DONTWAIT);
-                                            
-                                            memset(cmd, '\0', MAXDATASIZE);
+                                                        memset(cmd, '\0', MAXDATASIZE);
+
+                                                        strcat(cmd, "rm searchResults");
+
+                                                        int ret;
+                                                        if ((ret = system(cmd)) == -1) {
+                                                            perror("print search results");
+                                                        }
+
+
+                                                        int recvFileSize= recv_file(i,SEARCHRESULTS,MSG_DONTWAIT);
+
+                                                        memset(cmd, '\0', MAXDATASIZE);
                                                 //write cat command to print searchResults file
 
-                                            printf("search results: \n");
-                                            strcat(cmd, "cat searchResults");
+                                                        if(recvFileSize==0){
+                                                            printf("No results\n");
+                                                        }
+                                                        else{
+                                                            printf("search results: \n");
+                                                            strcat(cmd, "cat searchResults");
 
 
-                                            
-                                            if ((ret = system(cmd)) == -1) {
-                                                perror("print search results");
-                                            }
 
-                                            
+                                                            if ((ret = system(cmd)) == -1) {
+                                                                perror("print search results");
+                                                            }
+
+                                                        }
 
 
-                                        } // end act on data from server on option 2
+
+
+                                                    } // end act on data from server on option 2
 
                                         else{ // handle server exit
 
                                               if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
-                                                                // got error or connection closed by client
-                                                             if (nbytes == 0) {
-                                                                                // connection closed
-                                                                 printf("peer: socket %d hung up\n", i);
-                                                             } else {
-                                                                 perror("recv");
-                                                             }
-                                                            close(i); // bye!
-                                                            printf("%d is removed from master \n connection lost with server \n", i);
-                                                            FD_CLR(i, &master); // remove from master set
-                                                        }else{
+                                                                    // got error or connection closed by client
+                                               if (nbytes == 0) {
+                                                                                    // connection closed
+                                                   printf("peer: socket %d hung up\n", i);
+                                               } else {
+                                                   perror("recv");
+                                               }
+                                                                close(i); // bye!
+                                                                printf("connection with server is lost.. exiting\n");
+                                                                for(int i=0;i<fdmax;i++){
+                                                                    close(i); // close all sockets
+                                                                }                                                                
+                                                                exit(0);
+                                                            }else{
 
                                                                 printf("received: %s \n", buf);
 
                                                             }
 
 
-                                        }
+                                            }
 
-                                        option=0;
+                                            option=0;
 
-
-                                  //  } // end server sent data
 
                                  } // END handle data from server
 
@@ -708,32 +670,33 @@ int main(int argc, char *argv[]) {
 
                                             if(option==8){ // peer is sending file
                                                 if(!fork()){ // recv file with child process
-                                                   for(int j=0;j<fdmax;j++){
+                                                     for(int j=0;j<fdmax;j++){
                                                       if(j!=i) close(j);
-                                                    }
-                                                  recv_file(i,recvFilePath,0);
+                                                     }
+                                                  int recvFileSize= recv_file(i,recvFilePath,0);
+                                                  printf("%s received, size : %d\n", recvFilePath, recvFileSize);
                                                   close(i);
                                                   exit(0);
                                                 }
-                                                close(i);
+                                          close(i);
 
-                                                FD_CLR(i,&master);
+                                          FD_CLR(i,&master);
 
-                                            }
+                                      }
                                             else{ // peer is requesting a file
 
                                                 int peerOption=0,nbytes=0;
 
                                                 char pathstring[PATHSIZE];
 
-                                                        if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
+                                                if ((nbytes = recv(i, buf, sizeof buf, 0)) <= 0) {
                                                                 // got error or connection closed by client
-                                                             if (nbytes == 0) {
+                                                   if (nbytes == 0) {
                                                                                 // connection closed
-                                                                 printf("peer: socket %d hung up\n", i);
-                                                             } else {
-                                                                 perror("recv");
-                                                             }
+                                                       printf("peer: socket %d hung up\n", i);
+                                                   } else {
+                                                       perror("recv");
+                                                   }
                                                             close(i); // bye!
                                                             printf("%d is removed from master \n", i);
                                                             FD_CLR(i, &master); // remove from master set
@@ -746,35 +709,35 @@ int main(int argc, char *argv[]) {
                                                                 if( access(pathstring, F_OK ) != -1 ) {
                                                                         // file exists
                                                                     if(!fork()){ // send file with a child process
-                                                                       for(int j=0;j<fdmax;j++){
-                                                                        if(j!=i) close(j);
-                                                                       }
-                                                                       send_file(i,pathstring);
-                                                                       close(i);
-                                                                       exit(0);
-                                                                    }
-                                                                    close(i);
-                                                                    FD_CLR(i,&master);
-
-                                                                } else {
-                                                                        // file doesn't exist
-                                                                    if (send(i, "File Not Found", 14, 0) == -1) {
-                                                                        perror("send");                                                     
+                                                                         for(int j=0;j<fdmax;j++){
+                                                                            if(j!=i) close(j);
+                                                                         }
+                                                                        int sentFileSize=send_file(i,pathstring);
+                                                                        printf("%s sent, size: %d \n", pathstring,sentFileSize);
                                                                         close(i);
                                                                         exit(0);
                                                                     }
+                                                                close(i);
+                                                                FD_CLR(i,&master);
 
+                                                            } else {
+                                                                        // file doesn't exist
+                                                                if (send(i, "File Not Found\n", 15, 0) == -1) {
+                                                                    perror("send");                                                     
+                                                                    close(i);
+                                                                    exit(0);
                                                                 }
-                                                             }
+
+                                                            }
                                                         }
+                                                    }
                                                 }
 
-                                            option=0;       
+                                                option=0;       
                                         //}
 
 
                                  }// end Handle Data From Peer
-
 
 
                             } // END - isset

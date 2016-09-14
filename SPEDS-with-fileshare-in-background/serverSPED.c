@@ -13,6 +13,7 @@
 #include <netdb.h>
 #include <signal.h>
 #include <fcntl.h>
+#include <ifaddrs.h>
 
 #define USERNAMESIZE 11
 #define MAXDATASIZE 256
@@ -20,7 +21,7 @@
 
 #define SEARCHRESULTS "searchResults"
 
-#define PORT "7054" // port we're listening on
+#define PORT "7054" // port server is listening on
 // get sockaddr, IPv4 or IPv6:
 
  void *get_in_addr(struct sockaddr *sa) {
@@ -124,6 +125,42 @@ int main(void) {
     freeaddrinfo(ai); // all done with this
     // listen
 
+     //get local address 
+
+        struct ifaddrs * ifAddrStruct=NULL;
+        struct ifaddrs * ifa=NULL;
+        void * tmpAddrPtr=NULL;
+        char addressBuffer[INET_ADDRSTRLEN];
+
+        getifaddrs(&ifAddrStruct);
+
+        for (ifa = ifAddrStruct; ifa != NULL; ifa = ifa->ifa_next) {
+            if (!ifa->ifa_addr) {
+                continue;
+            }
+            if (ifa->ifa_addr->sa_family == AF_INET) { // check it is IP4
+                // is a valid IP4 Address
+                tmpAddrPtr=&((struct sockaddr_in *)ifa->ifa_addr)->sin_addr;
+
+                inet_ntop(AF_INET, tmpAddrPtr, addressBuffer, INET_ADDRSTRLEN);
+
+                if(!strcmp(ifa->ifa_name,"ens33")||!strcmp(ifa->ifa_name,"eth0")){
+
+                    printf("%s IP Address %s \n", ifa->ifa_name, addressBuffer); 
+                }
+            } 
+            // else if (ifa->ifa_addr->sa_family == AF_INET6) { // check it is IP6
+            //     // is a valid IP6 Address
+            //     tmpAddrPtr=&((struct sockaddr_in6 *)ifa->ifa_addr)->sin6_addr;
+            //     char addressBuffer[INET6_ADDRSTRLEN];
+            //     inet_ntop(AF_INET6, tmpAddrPtr, addressBuffer, INET6_ADDRSTRLEN);
+            //     printf("%s IP Address %s\n", ifa->ifa_name, addressBuffer); 
+            // }
+        }
+        if (ifAddrStruct!=NULL) freeifaddrs(ifAddrStruct);
+
+
+
     printf("server: waiting for connections \n");
 
     if (listen(listener, 10) == -1) {
@@ -226,7 +263,7 @@ int main(void) {
                         //username[USERNAMESIZE-1]='\0';
 
 
-                        sscanf(buf,"%d %s",&option,username);
+                        sscanf(buf,"%d",&option);
 
                         
                         //join 
@@ -237,7 +274,7 @@ int main(void) {
                             char addressBuffer[INET_ADDRSTRLEN];
 
 
-                            memset(addressBuffer, ' ', INET_ADDRSTRLEN);
+                            memset(addressBuffer, '\0', INET_ADDRSTRLEN);
                             //strncpy(addressBuffer, buf+2+(USERNAMESIZE-2)+1,INET_ADDRSTRLEN);
                             //addressBuffer[INET_ADDRSTRLEN]='\0';
 
@@ -273,7 +310,7 @@ int main(void) {
                             memset(buf, '\0', MAXDATASIZE);
                             strcat(buf, "hello ");
                             strcat(buf, username);
-                            strcat(buf, " \n you joined successfully \n");
+                          
                             if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
                                 perror("send");
                                 exit(0);
@@ -285,15 +322,17 @@ int main(void) {
 
                         char pathstring[PATHSIZE];
 
-                        memset(pathstring,' ', PATHSIZE);
-                        strncpy(pathstring, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
-                        pathstring[PATHSIZE-1]='\0';
+                        memset(pathstring,'\0', PATHSIZE);
+                       
+                        sscanf(buf,"%d %s %s",&option,username,pathstring);
 
-                            // put published path in a file 
-                        strcat(cmd, "echo ");
-                        strcat(cmd, pathstring);                            
-                        strcat(cmd, " >> ./publishedFiles/");
-                        strncat(cmd, username, USERNAMESIZE-1);                                        
+ 
+                         printf("server: option: %d , user: %s, filename: %s \n", option, username,pathstring);
+
+                        // put published path in a file 
+
+                         sprintf(cmd,"echo %s >> ./publishedFiles/%s",pathstring,username);
+                                                              
 
                         int ret;
                         if ((ret = system(cmd)) == -1) {
@@ -301,14 +340,12 @@ int main(void) {
                         }
 
                         memset(buf, '\0', MAXDATASIZE);
-                        strcat(buf, pathstring);
-                        strcat(buf, " is published successfully");
+                        sprintf(buf,"%d %s is published successfully \n",1,pathstring);
 
                         if (send(i, buf, MAXDATASIZE - 1, 0) == -1) {
                             perror("send");
                             exit(0);
                         }
-
 
                     }
 
@@ -318,7 +355,7 @@ int main(void) {
                         char searchKey[PATHSIZE];
 
                         memset(searchKey,'\0', PATHSIZE);
-                        strncpy(searchKey, buf+2+(USERNAMESIZE-2)+1, PATHSIZE-1);
+                        sscanf(buf,"%d %s",&option,searchKey);
 
                         //printf("searchKey : %s",searchKey);
 
@@ -353,7 +390,7 @@ cat ../clientlist | while read filename ip port || [[ -n \"$filename\" ]];\ndo\n
                     if (option == 5) {
 
                             //remove user from clientlist
-                         memset(cmd, '\0', MAXDATASIZE); 
+                        memset(cmd, '\0', MAXDATASIZE); 
                         sprintf(cmd,"sed -i /%s/d clientlist",username);
                         puts(cmd);
                         // snprintf(socketstring, 5, "%d", i);
