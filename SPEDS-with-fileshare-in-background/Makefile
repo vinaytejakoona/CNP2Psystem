@@ -1,10 +1,10 @@
-CC=gcc
+CC=g++
 CFLAGS=-I.
-SRCS =	serverSPED.c 
+SRCS =	peer.c 
 OBJS = $(SRCS:.cpp=.o)
 
 %.o: %.c 
 	$(CC) -c -o $@ $< $(CFLAGS)
 
-s: $(OBJS)
+p: $(OBJS)
 	$(CC) -o $@ $^ $(CFLAGS)
